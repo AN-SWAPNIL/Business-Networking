@@ -57,7 +57,7 @@ IMPORTANT INSTRUCTIONS:
 3. If a field is not present or unclear, leave it as an empty string
 4. For bio, extract any tagline, company description, or professional summary if present
 5. For location, extract city, state, country if mentioned
-6. For website, extract any URLs, social media handles, or web addresses
+6. For website, extract any URLs, social media handles, or web addresses. add https:// if not present
 7. For preferences, set all to false as these cannot be determined from a business card
 8. Return success: false if the image is not a business card, too blurry, or empty
 9. If multiple phone numbers, email addresses, or other fields are present, use only the first one
