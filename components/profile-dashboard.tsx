@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Building,
   Mail,
@@ -24,44 +26,49 @@ import {
   TrendingUp,
   Handshake,
   LogOut,
+  User as UserIcon,
 } from "lucide-react";
 import { EditProfileModal } from "@/components/edit-profile-modal";
 import { ProfileSettings } from "@/components/profile-settings";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
-
-// Mock user data - in real app, this would come from API/database
-const mockUser = {
-  id: "1",
-  name: "John Smith",
-  title: "Senior Software Engineer",
-  company: "Tech Solutions Inc.",
-  email: "john.smith@techsolutions.com",
-  phone: "+1 (555) 123-4567",
-  location: "San Francisco, CA",
-  website: "https://johnsmith.dev",
-  bio: "Passionate software engineer with 8+ years of experience building scalable web applications. I love mentoring junior developers and exploring new technologies.",
-  avatar: "/professional-headshot.png",
-  preferences: {
-    mentor: true,
-    invest: false,
-    discuss: true,
-    collaborate: true,
-    hire: false,
-  },
-  stats: {
-    connections: 247,
-    collaborations: 12,
-    mentorships: 8,
-  },
-  joinedDate: "March 2024",
-};
+import { getUserProfile, UserProfile } from "@/lib/api";
 
 export function ProfileDashboard() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
-  const { signOut } = useAuth();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const { user, signOut, loading: authLoading } = useAuth();
   const router = useRouter();
+
+  // Fetch user profile data
+  useEffect(() => {
+    async function fetchProfile() {
+      if (!user || authLoading) return;
+
+      try {
+        setProfileLoading(true);
+        setError(null);
+        const result = await getUserProfile();
+
+        if (result.success && result.profile) {
+          setProfile(result.profile);
+        } else {
+          setError(result.error || "Failed to load profile");
+        }
+      } catch (err) {
+        setError("Failed to load profile");
+        console.error("Error fetching profile:", err);
+      } finally {
+        setProfileLoading(false);
+      }
+    }
+
+    fetchProfile();
+  }, [user, authLoading]);
 
   const handleSignOut = async () => {
     try {
@@ -72,20 +79,161 @@ export function ProfileDashboard() {
     }
   };
 
+  const handleProfileUpdate = (updatedProfile: UserProfile) => {
+    setProfile(updatedProfile);
+  };
+
+  const getRelevantStats = () => {
+    if (!profile?.preferences || !profile?.stats) return [];
+
+    const stats = [];
+
+    // Always show connections
+    stats.push({
+      key: "connections",
+      label: "Connections",
+      value: profile.stats.connections,
+      color: "text-primary",
+    });
+
+    // Show other stats only if preferences are enabled
+    if (profile.preferences.collaborate) {
+      stats.push({
+        key: "collaborations",
+        label: "Collaborations",
+        value: profile.stats.collaborations,
+        color: "text-primary",
+      });
+    }
+
+    if (profile.preferences.mentor) {
+      stats.push({
+        key: "mentorships",
+        label: "Mentorships",
+        value: profile.stats.mentorships,
+        color: "text-primary",
+      });
+    }
+
+    if (profile.preferences.invest) {
+      stats.push({
+        key: "investments",
+        label: "Investments",
+        value: profile.stats.investments,
+        color: "text-accent",
+      });
+    }
+
+    if (profile.preferences.discuss) {
+      stats.push({
+        key: "discussions",
+        label: "Discussions",
+        value: profile.stats.discussions,
+        color: "text-primary",
+      });
+    }
+
+    if (profile.preferences.hire) {
+      stats.push({
+        key: "hired",
+        label: "Hired",
+        value: profile.stats.hired,
+        color: "text-accent",
+      });
+    }
+
+    return stats;
+  };
+
   const getPreferenceBadges = () => {
+    if (!profile?.preferences) return [];
+
     const badges = [];
-    if (mockUser.preferences.mentor)
+    if (profile.preferences.mentor)
       badges.push({ label: "Mentoring", icon: Users });
-    if (mockUser.preferences.invest)
+    if (profile.preferences.invest)
       badges.push({ label: "Investing", icon: TrendingUp });
-    if (mockUser.preferences.discuss)
+    if (profile.preferences.discuss)
       badges.push({ label: "Discussions", icon: MessageSquare });
-    if (mockUser.preferences.collaborate)
+    if (profile.preferences.collaborate)
       badges.push({ label: "Collaborating", icon: Handshake });
-    if (mockUser.preferences.hire)
+    if (profile.preferences.hire)
       badges.push({ label: "Hiring", icon: Building });
     return badges;
   };
+
+  // Show loading state
+  if (authLoading || profileLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <Skeleton className="h-8 w-40 mb-2" />
+            <Skeleton className="h-5 w-60" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-32" />
+            <Skeleton className="h-10 w-24" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-1">
+            <Card>
+              <CardHeader className="text-center pb-4">
+                <Skeleton className="w-24 h-24 rounded-full mx-auto mb-4" />
+                <Skeleton className="h-6 w-32 mx-auto mb-2" />
+                <Skeleton className="h-4 w-40 mx-auto" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center space-x-3">
+                    <Skeleton className="w-4 h-4" />
+                    <Skeleton className="h-4 flex-1" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+          <div className="lg:col-span-2">
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-20" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-20 w-full" />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <Alert className="mb-8">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+        <Button onClick={() => window.location.reload()}>Try Again</Button>
+      </div>
+    );
+  }
+
+  // If no profile data, redirect to profile completion
+  if (!profile) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <Alert className="mb-8">
+          <AlertDescription>
+            Profile not found. Please complete your profile setup.
+          </AlertDescription>
+        </Alert>
+        <Button onClick={() => router.push("/")}>Complete Profile</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -122,46 +270,51 @@ export function ProfileDashboard() {
             <CardHeader className="text-center pb-4">
               <Avatar className="w-24 h-24 mx-auto mb-4">
                 <AvatarImage
-                  src={mockUser.avatar || "/placeholder.svg"}
-                  alt={mockUser.name}
+                  src={profile.avatar_url || "/placeholder.svg"}
+                  alt={profile.name}
                 />
                 <AvatarFallback className="text-lg">
-                  {mockUser.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
+                  <UserIcon className="w-8 h-8" />
                 </AvatarFallback>
               </Avatar>
-              <CardTitle className="font-serif">{mockUser.name}</CardTitle>
+              <CardTitle className="font-serif">{profile.name}</CardTitle>
               <CardDescription className="text-base">
-                {mockUser.title}
+                {profile.title || "No title set"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center space-x-3 text-sm">
-                <Building className="w-4 h-4 text-muted-foreground" />
-                <span>{mockUser.company}</span>
-              </div>
-              <div className="flex items-center space-x-3 text-sm">
-                <MapPin className="w-4 h-4 text-muted-foreground" />
-                <span>{mockUser.location}</span>
-              </div>
+              {profile.company && (
+                <div className="flex items-center space-x-3 text-sm">
+                  <Building className="w-4 h-4 text-muted-foreground" />
+                  <span>{profile.company}</span>
+                </div>
+              )}
+              {profile.location && (
+                <div className="flex items-center space-x-3 text-sm">
+                  <MapPin className="w-4 h-4 text-muted-foreground" />
+                  <span>{profile.location}</span>
+                </div>
+              )}
               <div className="flex items-center space-x-3 text-sm">
                 <Mail className="w-4 h-4 text-muted-foreground" />
-                <span className="truncate">{mockUser.email}</span>
+                <span className="truncate">{profile.email}</span>
               </div>
-              <div className="flex items-center space-x-3 text-sm">
-                <Phone className="w-4 h-4 text-muted-foreground" />
-                <span>{mockUser.phone}</span>
-              </div>
-              {mockUser.website && (
+              {profile.phone && (
+                <div className="flex items-center space-x-3 text-sm">
+                  <Phone className="w-4 h-4 text-muted-foreground" />
+                  <span>{profile.phone}</span>
+                </div>
+              )}
+              {profile.website && (
                 <div className="flex items-center space-x-3 text-sm">
                   <Globe className="w-4 h-4 text-muted-foreground" />
                   <a
-                    href={mockUser.website}
+                    href={profile.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="text-primary hover:underline truncate"
                   >
-                    {mockUser.website}
+                    {profile.website}
                   </a>
                 </div>
               )}
@@ -170,38 +323,54 @@ export function ProfileDashboard() {
               <div className="pt-4 border-t">
                 <h4 className="font-medium mb-3">Open to:</h4>
                 <div className="flex flex-wrap gap-2">
-                  {getPreferenceBadges().map(({ label, icon: Icon }) => (
-                    <Badge key={label} variant="secondary" className="text-xs">
-                      <Icon className="w-3 h-3 mr-1" />
-                      {label}
-                    </Badge>
-                  ))}
+                  {getPreferenceBadges().length > 0 ? (
+                    getPreferenceBadges().map(({ label, icon: Icon }) => (
+                      <Badge
+                        key={label}
+                        variant="secondary"
+                        className="text-xs"
+                      >
+                        <Icon className="w-3 h-3 mr-1" />
+                        {label}
+                      </Badge>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No preferences set
+                    </p>
+                  )}
                 </div>
               </div>
 
               {/* Stats */}
               <div className="pt-4 border-t">
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-2xl font-bold text-primary">
-                      {mockUser.stats.connections}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Connections</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-primary">
-                      {mockUser.stats.collaborations}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Projects</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-primary">
-                      {mockUser.stats.mentorships}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Mentorships</p>
-                  </div>
+                <div
+                  className={`grid gap-4 text-center ${
+                    getRelevantStats().length <= 3
+                      ? `grid-cols-${getRelevantStats().length}`
+                      : "grid-cols-3"
+                  }`}
+                >
+                  {getRelevantStats().map(({ key, label, value, color }) => (
+                    <div key={key}>
+                      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
+
+              {profile.created_at && (
+                <div className="pt-4 border-t text-center">
+                  <p className="text-xs text-muted-foreground">
+                    Joined{" "}
+                    {new Date(profile.created_at).toLocaleDateString("en-US", {
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -222,7 +391,8 @@ export function ProfileDashboard() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-muted-foreground leading-relaxed">
-                    {mockUser.bio}
+                    {profile.bio ||
+                      "No bio available. Edit your profile to add a professional bio."}
                   </p>
                 </CardContent>
               </Card>
@@ -232,6 +402,17 @@ export function ProfileDashboard() {
                   <CardTitle className="font-serif">Recent Activity</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="flex items-start space-x-3 p-3 bg-muted/50 rounded-lg">
+                    <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
+                    <div>
+                      <p className="font-medium">Profile created</p>
+                      <p className="text-sm text-muted-foreground">
+                        {profile.created_at
+                          ? new Date(profile.created_at).toLocaleDateString()
+                          : "Recently"}
+                      </p>
+                    </div>
+                  </div>
                   <div className="flex items-start space-x-3 p-3 bg-muted/50 rounded-lg">
                     <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
                     <div>
@@ -260,6 +441,12 @@ export function ProfileDashboard() {
                         2 weeks ago
                       </p>
                     </div>
+                  </div>
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>
+                      More activity will appear here as you connect and
+                      collaborate with others.
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -321,7 +508,8 @@ export function ProfileDashboard() {
       <EditProfileModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
-        userData={mockUser}
+        userData={profile}
+        onUpdate={handleProfileUpdate}
       />
     </div>
   );

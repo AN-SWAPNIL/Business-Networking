@@ -31,7 +31,31 @@ CREATE TABLE IF NOT EXISTS users (
   }'::jsonb,
   skills TEXT[],
   interests TEXT[],
-  connections_count INTEGER DEFAULT 0,
+  stats JSONB DEFAULT '{
+    "connections": 0,
+    "collaborations": 0,
+    "mentorships": 0,
+    "investments": 0,
+    "discussions": 0,
+    "monitored": 0,
+    "hired": 0
+  }'::jsonb,
+  settings JSONB DEFAULT '{
+    "notifications": {
+      "email": true,
+      "push": false,
+      "connections": true,
+      "messages": true,
+      "collaborations": true,
+      "mentions": false
+    },
+    "privacy": {
+      "profileVisibility": "public",
+      "showEmail": false,
+      "showPhone": false,
+      "allowMessages": true
+    }
+  }'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -117,6 +141,7 @@ CREATE INDEX IF NOT EXISTS idx_users_location ON users(location);
 CREATE INDEX IF NOT EXISTS idx_users_skills ON users USING GIN(skills);
 CREATE INDEX IF NOT EXISTS idx_users_interests ON users USING GIN(interests);
 CREATE INDEX IF NOT EXISTS idx_users_preferences ON users USING GIN(preferences);
+CREATE INDEX IF NOT EXISTS idx_users_stats ON users USING GIN(stats);
 
 -- Business cards indexes
 CREATE INDEX IF NOT EXISTS idx_business_cards_user_id ON business_cards(user_id);
@@ -230,7 +255,7 @@ CREATE POLICY "Users can view own activity" ON user_activity
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.users (id, email, name, title, company, location, bio, phone, website, avatar_url, preferences)
+  INSERT INTO public.users (id, email, name, title, company, location, bio, phone, website, avatar_url, preferences, stats)
   VALUES (
     NEW.id,
     NEW.email,
@@ -252,6 +277,15 @@ BEGIN
       "discuss": false,
       "collaborate": false,
       "hire": false
+    }'::jsonb,
+    '{
+      "connections": 0,
+      "collaborations": 0,
+      "mentorships": 0,
+      "investments": 0,
+      "discussions": 0,
+      "monitored": 0,
+      "hired": 0
     }'::jsonb
   );
   RETURN NEW;
@@ -320,28 +354,31 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Function to update connection count
-CREATE OR REPLACE FUNCTION public.update_connections_count()
+-- Function to update connection stats
+CREATE OR REPLACE FUNCTION public.update_connection_stats()
 RETURNS TRIGGER AS $$
+DECLARE
+  requester_connections_count INTEGER;
+  recipient_connections_count INTEGER;
 BEGIN
-  -- Update requester's connection count
+  -- Update requester's connection count in stats
+  SELECT COUNT(*) INTO requester_connections_count
+  FROM connections 
+  WHERE (requester_id = NEW.requester_id OR recipient_id = NEW.requester_id) 
+  AND status = 'accepted';
+  
   UPDATE users 
-  SET connections_count = (
-    SELECT COUNT(*) 
-    FROM connections 
-    WHERE (requester_id = NEW.requester_id OR recipient_id = NEW.requester_id) 
-    AND status = 'accepted'
-  )
+  SET stats = jsonb_set(stats, '{connections}', requester_connections_count::text::jsonb)
   WHERE id = NEW.requester_id;
   
-  -- Update recipient's connection count
+  -- Update recipient's connection count in stats
+  SELECT COUNT(*) INTO recipient_connections_count
+  FROM connections 
+  WHERE (requester_id = NEW.recipient_id OR recipient_id = NEW.recipient_id) 
+  AND status = 'accepted';
+  
   UPDATE users 
-  SET connections_count = (
-    SELECT COUNT(*) 
-    FROM connections 
-    WHERE (requester_id = NEW.recipient_id OR recipient_id = NEW.recipient_id) 
-    AND status = 'accepted'
-  )
+  SET stats = jsonb_set(stats, '{connections}', recipient_connections_count::text::jsonb)
   WHERE id = NEW.recipient_id;
   
   RETURN NEW;
@@ -370,11 +407,11 @@ CREATE TRIGGER update_connections_updated_at
   BEFORE UPDATE ON connections
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
--- Trigger for updating connection counts
-DROP TRIGGER IF EXISTS update_connection_count_trigger ON connections;
-CREATE TRIGGER update_connection_count_trigger
+-- Trigger for updating connection stats
+DROP TRIGGER IF EXISTS update_connection_stats_trigger ON connections;
+CREATE TRIGGER update_connection_stats_trigger
   AFTER INSERT OR UPDATE ON connections
-  FOR EACH ROW EXECUTE FUNCTION public.update_connections_count();
+  FOR EACH ROW EXECUTE FUNCTION public.update_connection_stats();
 
 -- ====================================================================
 -- INITIAL DATA / SEEDS (Optional)

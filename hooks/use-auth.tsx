@@ -31,7 +31,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           error.message?.includes("Auth session missing") ||
           error.message?.includes("Forbidden") ||
           error.message?.includes("401") ||
-          error.message?.includes("403")
+          error.message?.includes("403") ||
+          error.message?.includes("User from sub claim in JWT does not exist")
         ) {
           // These are expected when user is not logged in or deleted
           await supabase.auth.signOut();
@@ -73,7 +74,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             error.message?.includes("Auth session missing") ||
             error.message?.includes("Forbidden") ||
             error.message?.includes("401") ||
-            error.message?.includes("403")
+            error.message?.includes("403") ||
+            error.message?.includes("User from sub claim in JWT does not exist")
           ) {
             // These are expected when user is not logged in or deleted
             await supabase.auth.signOut();

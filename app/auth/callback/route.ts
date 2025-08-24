@@ -6,11 +6,13 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/";
+  const redirectTo = searchParams.get("redirectTo") ?? "/";
   const profileData = searchParams.get("profile_data");
 
   console.log("Callback called with:", {
     code: !!code,
     next,
+    redirectTo,
     profileData: !!profileData,
   });
 
@@ -384,8 +386,9 @@ export async function GET(request: NextRequest) {
         // If coming from onboarding or OAuth signup, redirect there for verification detection
         return NextResponse.redirect(`${origin}/?verified=true`);
       } else {
-        // If coming from login or specific redirect, go there
-        return NextResponse.redirect(`${origin}${next}`);
+        // If coming from login or specific redirect, use redirectTo parameter or default to root
+        const finalRedirect = redirectTo !== "/" ? redirectTo : next;
+        return NextResponse.redirect(`${origin}${finalRedirect}`);
       }
     } else {
       console.error("Authentication error:", error);

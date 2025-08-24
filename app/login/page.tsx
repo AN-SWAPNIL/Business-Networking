@@ -63,9 +63,10 @@ export default function LoginPage() {
   // Redirect if already authenticated
   useEffect(() => {
     if (!authLoading && user) {
-      router.push("/");
+      const redirectTo = searchParams.get("redirectTo") || "/";
+      router.push(redirectTo);
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,8 +86,9 @@ export default function LoginPage() {
         return;
       }
 
-      // Success - redirect to home
-      router.push("/");
+      // Success - redirect to intended destination
+      const redirectTo = searchParams.get("redirectTo") || "/";
+      router.push(redirectTo);
       router.refresh();
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
@@ -101,10 +103,13 @@ export default function LoginPage() {
 
     try {
       // Use Supabase client directly for Google OAuth
+      const redirectTo = searchParams.get("redirectTo") || "/";
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${
+            window.location.origin
+          }/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`,
         },
       });
 
