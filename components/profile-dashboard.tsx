@@ -1,14 +1,34 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Building, Mail, Phone, MapPin, Globe, Edit3, Users, MessageSquare, TrendingUp, Handshake } from "lucide-react"
-import { EditProfileModal } from "@/components/edit-profile-modal"
-import { ProfileSettings } from "@/components/profile-settings"
+import { useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Building,
+  Mail,
+  Phone,
+  MapPin,
+  Globe,
+  Edit3,
+  Users,
+  MessageSquare,
+  TrendingUp,
+  Handshake,
+  LogOut,
+} from "lucide-react";
+import { EditProfileModal } from "@/components/edit-profile-modal";
+import { ProfileSettings } from "@/components/profile-settings";
+import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "next/navigation";
 
 // Mock user data - in real app, this would come from API/database
 const mockUser = {
@@ -35,34 +55,62 @@ const mockUser = {
     mentorships: 8,
   },
   joinedDate: "March 2024",
-}
+};
 
 export function ProfileDashboard() {
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState("overview")
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
+  const { signOut } = useAuth();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.push("/login");
+    } catch (error) {
+      console.error("Sign out error:", error);
+    }
+  };
 
   const getPreferenceBadges = () => {
-    const badges = []
-    if (mockUser.preferences.mentor) badges.push({ label: "Mentoring", icon: Users })
-    if (mockUser.preferences.invest) badges.push({ label: "Investing", icon: TrendingUp })
-    if (mockUser.preferences.discuss) badges.push({ label: "Discussions", icon: MessageSquare })
-    if (mockUser.preferences.collaborate) badges.push({ label: "Collaborating", icon: Handshake })
-    if (mockUser.preferences.hire) badges.push({ label: "Hiring", icon: Building })
-    return badges
-  }
+    const badges = [];
+    if (mockUser.preferences.mentor)
+      badges.push({ label: "Mentoring", icon: Users });
+    if (mockUser.preferences.invest)
+      badges.push({ label: "Investing", icon: TrendingUp });
+    if (mockUser.preferences.discuss)
+      badges.push({ label: "Discussions", icon: MessageSquare });
+    if (mockUser.preferences.collaborate)
+      badges.push({ label: "Collaborating", icon: Handshake });
+    if (mockUser.preferences.hire)
+      badges.push({ label: "Hiring", icon: Building });
+    return badges;
+  };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-serif font-bold text-primary">My Profile</h1>
-          <p className="text-muted-foreground">Manage your professional presence</p>
+          <h1 className="text-3xl font-serif font-bold text-primary">
+            My Profile
+          </h1>
+          <p className="text-muted-foreground">
+            Manage your professional presence
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setIsEditModalOpen(true)}>
             <Edit3 className="w-4 h-4 mr-2" />
             Edit Profile
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={handleSignOut}
+            className="text-muted-foreground hover:text-destructive"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Sign Out
           </Button>
         </div>
       </div>
@@ -73,7 +121,10 @@ export function ProfileDashboard() {
           <Card>
             <CardHeader className="text-center pb-4">
               <Avatar className="w-24 h-24 mx-auto mb-4">
-                <AvatarImage src={mockUser.avatar || "/placeholder.svg"} alt={mockUser.name} />
+                <AvatarImage
+                  src={mockUser.avatar || "/placeholder.svg"}
+                  alt={mockUser.name}
+                />
                 <AvatarFallback className="text-lg">
                   {mockUser.name
                     .split(" ")
@@ -82,7 +133,9 @@ export function ProfileDashboard() {
                 </AvatarFallback>
               </Avatar>
               <CardTitle className="font-serif">{mockUser.name}</CardTitle>
-              <CardDescription className="text-base">{mockUser.title}</CardDescription>
+              <CardDescription className="text-base">
+                {mockUser.title}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center space-x-3 text-sm">
@@ -104,7 +157,10 @@ export function ProfileDashboard() {
               {mockUser.website && (
                 <div className="flex items-center space-x-3 text-sm">
                   <Globe className="w-4 h-4 text-muted-foreground" />
-                  <a href={mockUser.website} className="text-primary hover:underline truncate">
+                  <a
+                    href={mockUser.website}
+                    className="text-primary hover:underline truncate"
+                  >
                     {mockUser.website}
                   </a>
                 </div>
@@ -127,15 +183,21 @@ export function ProfileDashboard() {
               <div className="pt-4 border-t">
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
-                    <p className="text-2xl font-bold text-primary">{mockUser.stats.connections}</p>
+                    <p className="text-2xl font-bold text-primary">
+                      {mockUser.stats.connections}
+                    </p>
                     <p className="text-xs text-muted-foreground">Connections</p>
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-primary">{mockUser.stats.collaborations}</p>
+                    <p className="text-2xl font-bold text-primary">
+                      {mockUser.stats.collaborations}
+                    </p>
                     <p className="text-xs text-muted-foreground">Projects</p>
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-primary">{mockUser.stats.mentorships}</p>
+                    <p className="text-2xl font-bold text-primary">
+                      {mockUser.stats.mentorships}
+                    </p>
                     <p className="text-xs text-muted-foreground">Mentorships</p>
                   </div>
                 </div>
@@ -159,7 +221,9 @@ export function ProfileDashboard() {
                   <CardTitle className="font-serif">About</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-muted-foreground leading-relaxed">{mockUser.bio}</p>
+                  <p className="text-muted-foreground leading-relaxed">
+                    {mockUser.bio}
+                  </p>
                 </CardContent>
               </Card>
 
@@ -171,22 +235,30 @@ export function ProfileDashboard() {
                   <div className="flex items-start space-x-3 p-3 bg-muted/50 rounded-lg">
                     <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
                     <div>
-                      <p className="font-medium">Connected with Sarah Johnson</p>
-                      <p className="text-sm text-muted-foreground">2 days ago</p>
+                      <p className="font-medium">
+                        Connected with Sarah Johnson
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        2 days ago
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-start space-x-3 p-3 bg-muted/50 rounded-lg">
                     <div className="w-2 h-2 bg-accent rounded-full mt-2"></div>
                     <div>
                       <p className="font-medium">Started mentoring Alex Chen</p>
-                      <p className="text-sm text-muted-foreground">1 week ago</p>
+                      <p className="text-sm text-muted-foreground">
+                        1 week ago
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-start space-x-3 p-3 bg-muted/50 rounded-lg">
                     <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
                     <div>
                       <p className="font-medium">Joined Tech Solutions Inc.</p>
-                      <p className="text-sm text-muted-foreground">2 weeks ago</p>
+                      <p className="text-sm text-muted-foreground">
+                        2 weeks ago
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -196,29 +268,41 @@ export function ProfileDashboard() {
             <TabsContent value="activity" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="font-serif">Connection History</CardTitle>
-                  <CardDescription>Your networking activity over time</CardDescription>
+                  <CardTitle className="font-serif">
+                    Connection History
+                  </CardTitle>
+                  <CardDescription>
+                    Your networking activity over time
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <div className="flex justify-between items-center p-4 border rounded-lg">
                       <div>
-                        <p className="font-medium">New connections this month</p>
-                        <p className="text-sm text-muted-foreground">March 2024</p>
+                        <p className="font-medium">
+                          New connections this month
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          March 2024
+                        </p>
                       </div>
                       <div className="text-2xl font-bold text-primary">12</div>
                     </div>
                     <div className="flex justify-between items-center p-4 border rounded-lg">
                       <div>
                         <p className="font-medium">Active collaborations</p>
-                        <p className="text-sm text-muted-foreground">Currently ongoing</p>
+                        <p className="text-sm text-muted-foreground">
+                          Currently ongoing
+                        </p>
                       </div>
                       <div className="text-2xl font-bold text-accent">3</div>
                     </div>
                     <div className="flex justify-between items-center p-4 border rounded-lg">
                       <div>
                         <p className="font-medium">Profile views</p>
-                        <p className="text-sm text-muted-foreground">Last 30 days</p>
+                        <p className="text-sm text-muted-foreground">
+                          Last 30 days
+                        </p>
                       </div>
                       <div className="text-2xl font-bold text-primary">89</div>
                     </div>
@@ -234,7 +318,11 @@ export function ProfileDashboard() {
         </div>
       </div>
 
-      <EditProfileModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} userData={mockUser} />
+      <EditProfileModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        userData={mockUser}
+      />
     </div>
-  )
+  );
 }
