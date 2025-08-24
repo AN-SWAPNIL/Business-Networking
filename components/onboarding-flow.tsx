@@ -54,20 +54,20 @@ export function OnboardingFlow() {
     phone: string;
     email: string;
     title: string;
+    location: string;
+    website: string;
+    preferences: {
+      mentor: boolean;
+      invest: boolean;
+      discuss: boolean;
+      collaborate: boolean;
+      hire: boolean;
+    },
   }) => {
     // Extend data with default values and save to localStorage
     const extendedData = {
       ...data,
       bio: "",
-      location: "",
-      website: "",
-      preferences: {
-        mentor: false,
-        invest: false,
-        discuss: false,
-        collaborate: false,
-        hire: false,
-      },
     };
     const profileData = { ...extendedData, timestamp: Date.now() };
     localStorage.setItem("tempProfile", JSON.stringify(profileData));
