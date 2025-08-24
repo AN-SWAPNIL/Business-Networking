@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -37,6 +38,21 @@ export function SignupStep({ profileData, onComplete }: SignupStepProps) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [awaitingEmailConfirmation, setAwaitingEmailConfirmation] =
     useState(false);
+  const searchParams = useSearchParams();
+
+  // Check for OAuth callback errors
+  useEffect(() => {
+    const urlError = searchParams.get("error");
+    const urlMessage = searchParams.get("message");
+
+    if (urlError === "email_mismatch") {
+      setError(urlMessage || "Google email does not match the profile email");
+    } else if (urlError === "signup_required") {
+      setError(
+        urlMessage || "Please sign up first before logging in with Google"
+      );
+    }
+  }, [searchParams]);
 
   const handleEmailSignup = async () => {
     if (password.length < 6) {
@@ -70,6 +86,7 @@ export function SignupStep({ profileData, onComplete }: SignupStepProps) {
             bio: profileData.bio,
             phone: profileData.phone,
             website: profileData.website,
+            email: profileData.email,
           },
         }),
       });

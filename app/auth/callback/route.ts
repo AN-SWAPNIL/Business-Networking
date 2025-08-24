@@ -39,6 +39,133 @@ export async function GET(request: NextRequest) {
           } = await supabase.auth.getUser();
 
           if (user) {
+            // Reject if Google email does not match profileData email
+
+            // Use service role client to bypass RLS for server-side operations
+            const supabaseAdmin = createSupabaseClient(
+              process.env.NEXT_PUBLIC_SUPABASE_URL!,
+              process.env.SUPABASE_SERVICE_ROLE_KEY!
+            );
+
+            // Check if user exists in public.users table
+            const { data: existingUser, error: checkError } =
+              await supabaseAdmin
+                .from("users")
+                .select("id, created_at, updated_at")
+                .eq("id", user.id)
+                .single();
+
+            console.log("User check result:", { existingUser, checkError });
+
+            if (checkError && checkError.code === "PGRST116") {
+              // User doesn't exist in public.users table - this means email signup flow
+              // For signup with profile data, this is unexpected - should have been created
+              console.error(
+                "🚫 User not found in database during signup - this shouldn't happen"
+              );
+
+              // Delete the auth user and redirect with error
+              const { error: authDeleteError } =
+                await supabaseAdmin.auth.admin.deleteUser(user.id);
+              if (authDeleteError) {
+                console.error("Failed to delete auth user:", authDeleteError);
+              }
+
+              await supabase.auth.signOut();
+              return NextResponse.redirect(
+                `${origin}/?error=signup_failed&message=Signup failed. Please try again.`
+              );
+            } else if (checkError) {
+              // Other database errors
+              console.error("Database error during signup:", checkError);
+
+              // Delete the auth user and redirect with error
+              const { error: authDeleteError } =
+                await supabaseAdmin.auth.admin.deleteUser(user.id);
+              if (authDeleteError) {
+                console.error("Failed to delete auth user:", authDeleteError);
+              }
+
+              await supabase.auth.signOut();
+              return NextResponse.redirect(
+                `${origin}/?error=database_error&message=Database error. Please try again.`
+              );
+            } else if (existingUser) {
+              // User exists in public.users - check if newly created
+              const userCreatedAt = new Date(existingUser.created_at);
+              const userUpdatedAt = new Date(existingUser.updated_at);
+              const isNewlyCreated =
+                userCreatedAt.getTime() === userUpdatedAt.getTime();
+
+              console.log(`Public.users created at: ${userCreatedAt}`);
+              console.log(`Public.users updated at: ${userUpdatedAt}`);
+              console.log(
+                `Is newly created (created_at === updated_at): ${isNewlyCreated}`
+              );
+
+              if (!isNewlyCreated) {
+                // User already exists and is not newly created - this means email already taken
+                console.error("🚫 Email already exists - rejecting signup");
+
+                // Delete the auth user and redirect with error
+                const { error: authDeleteError } =
+                  await supabaseAdmin.auth.admin.deleteUser(user.id);
+                if (authDeleteError) {
+                  console.error("Failed to delete auth user:", authDeleteError);
+                }
+
+                await supabase.auth.signOut();
+                return NextResponse.redirect(
+                  `${origin}/?error=email_exists&message=A user with this email already exists. Please sign in with your existing account.`
+                );
+              }
+            }
+
+            // Check if Google email matches profile data email
+            if (user.email !== decodedProfileData.email) {
+              console.error(
+                "🚫 Google email does not match profile data email. Deleting user and rejecting signup."
+              );
+
+              // console.log("Email mismatch:", {
+              //   user: user,
+              //   profile: decodedProfileData
+              // });
+
+              // First delete from public.users table (in case it was created by trigger)
+              const { error: publicDeleteError } = await supabaseAdmin
+                .from("users")
+                .delete()
+                .eq("id", user.id);
+
+              if (publicDeleteError) {
+                console.error(
+                  "Failed to delete from public.users:",
+                  publicDeleteError
+                );
+              } else {
+                console.log("✅ Successfully deleted from public.users");
+              }
+
+              // Then delete from auth.users table
+              const { error: authDeleteError } =
+                await supabaseAdmin.auth.admin.deleteUser(user.id);
+
+              if (authDeleteError) {
+                console.error(
+                  "Failed to delete from auth.users:",
+                  authDeleteError
+                );
+              } else {
+                console.log("✅ Successfully deleted from auth.users");
+              }
+
+              await supabase.auth.signOut();
+              return NextResponse.redirect(
+                `${origin}/?error=email_mismatch&message=Google email does not match profile data email.`
+              );
+            }
+
             // Update user metadata with profile information
             const { error: updateError } = await supabase.auth.updateUser({
               data: {
@@ -55,12 +182,6 @@ export async function GET(request: NextRequest) {
             if (updateError) {
               console.error("Failed to update user metadata:", updateError);
             }
-
-            // Use service role client to bypass RLS for server-side operations
-            const supabaseAdmin = createSupabaseClient(
-              process.env.NEXT_PUBLIC_SUPABASE_URL!,
-              process.env.SUPABASE_SERVICE_ROLE_KEY!
-            );
 
             // Also update the public.users table directly
             console.log("Updating users table with:", {
@@ -226,7 +347,24 @@ export async function GET(request: NextRequest) {
                 );
               }
             } else if (checkError) {
+              // Handle database errors when checking user existence
               console.error("Error checking user existence:", checkError);
+
+              // If it's not a "user not found" error, something else went wrong
+              // Sign out and redirect with generic error
+              await supabase.auth.signOut();
+              return NextResponse.redirect(
+                `${origin}/login?error=database_error&message=Unable to verify user account. Please try again.`
+              );
+            } else {
+              // This shouldn't happen (no user found, no error, but existingUser is null)
+              console.error(
+                "Unexpected state: no user found but no error returned"
+              );
+              await supabase.auth.signOut();
+              return NextResponse.redirect(
+                `${origin}/login?error=unexpected_error&message=An unexpected error occurred. Please try again.`
+              );
             }
           }
         } catch (loginError) {
@@ -249,5 +387,5 @@ export async function GET(request: NextRequest) {
   }
 
   // If there's no code, redirect to login with error
-  return NextResponse.redirect(`${origin}/login?error=invalid_auth_link`);
+  return NextResponse.redirect(`${origin}/?error=invalid_auth_link`);
 }
