@@ -166,6 +166,7 @@ export function EditProfileModal({ isOpen, onClose, userData }: EditProfileModal
                 <Globe className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="edit-website"
+                  type="url"
                   value={formData.website}
                   onChange={(e) => handleInputChange("website", e.target.value)}
                   className="pl-10"

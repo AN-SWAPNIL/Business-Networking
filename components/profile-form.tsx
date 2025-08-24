@@ -22,6 +22,7 @@ import {
   Mail,
   Briefcase,
   ArrowRight,
+  Globe,
 } from "lucide-react";
 
 interface ProfileFormProps {
@@ -194,13 +195,17 @@ export function ProfileForm({ initialData, onComplete }: ProfileFormProps) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="website">Website</Label>
-                <Input
-                  id="website"
-                  type="url"
-                  value={formData.website}
-                  onChange={(e) => handleInputChange("website", e.target.value)}
-                  placeholder="https://yourwebsite.com"
-                />
+                <div className="relative">
+                  <Globe className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="website"
+                    type="url"
+                    value={formData.website}
+                    onChange={(e) => handleInputChange("website", e.target.value)}
+                    className="pl-10"
+                    placeholder="https://yourwebsite.com"
+                  />
+                </div>
               </div>
             </div>
             <div className="space-y-2">
