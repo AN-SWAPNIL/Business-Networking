@@ -14,6 +14,15 @@ const signupSchema = z.object({
     bio: z.string().optional(),
     phone: z.string().optional(),
     website: z.string().optional(),
+    preferences: z
+      .object({
+        mentor: z.boolean(),
+        invest: z.boolean(),
+        discuss: z.boolean(),
+        collaborate: z.boolean(),
+        hire: z.boolean(),
+      })
+      .optional(),
   }),
 });
 
@@ -33,7 +42,7 @@ export async function POST(request: NextRequest) {
           process.env.NEXT_PUBLIC_APP_URL
         }/auth/callback?profile_data=${btoa(JSON.stringify(profileData))}`,
         data: {
-          full_name: profileData.name, // Just basic data, full profile via callback
+          name: profileData.name, // Just basic data, full profile via callback
         },
       },
     });

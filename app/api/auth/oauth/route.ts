@@ -16,6 +16,15 @@ const oauthSchema = z.object({
       bio: z.string().optional(),
       phone: z.string().optional(),
       website: z.string().optional(),
+      preferences: z
+        .object({
+          mentor: z.boolean(),
+          invest: z.boolean(),
+          discuss: z.boolean(),
+          collaborate: z.boolean(),
+          hire: z.boolean(),
+        })
+        .optional(),
     })
     .optional(),
 });
@@ -32,7 +41,6 @@ export async function POST(request: NextRequest) {
     // If profile data is provided (signup), include it in the redirect
     const encodedProfileData = btoa(JSON.stringify(profileData));
     redirectTo += `?profile_data=${encodedProfileData}`;
-
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",

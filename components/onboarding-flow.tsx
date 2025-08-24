@@ -30,6 +30,13 @@ export function OnboardingFlow() {
     bio: "",
     location: "",
     website: "",
+    preferences: {
+      mentor: false,
+      invest: false,
+      discuss: false,
+      collaborate: false,
+      hire: false,
+    },
   });
 
   // Check for authentication - if user is authenticated, always go to complete
@@ -54,6 +61,13 @@ export function OnboardingFlow() {
       bio: "",
       location: "",
       website: "",
+      preferences: {
+        mentor: false,
+        invest: false,
+        discuss: false,
+        collaborate: false,
+        hire: false,
+      },
     };
     const profileData = { ...extendedData, timestamp: Date.now() };
     localStorage.setItem("tempProfile", JSON.stringify(profileData));
@@ -309,6 +323,13 @@ export function OnboardingFlow() {
                     bio: "",
                     location: "",
                     website: "",
+                    preferences: {
+                      mentor: false,
+                      invest: false,
+                      discuss: false,
+                      collaborate: false,
+                      hire: false,
+                    },
                   };
                   setExtractedData(emptyData);
                   setCurrentStep("profile");

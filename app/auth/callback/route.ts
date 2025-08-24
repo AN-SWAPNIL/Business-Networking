@@ -169,13 +169,20 @@ export async function GET(request: NextRequest) {
             // Update user metadata with profile information
             const { error: updateError } = await supabase.auth.updateUser({
               data: {
-                full_name: decodedProfileData.name,
+                name: decodedProfileData.name,
                 title: decodedProfileData.title,
                 company: decodedProfileData.company,
                 location: decodedProfileData.location,
                 bio: decodedProfileData.bio,
                 phone: decodedProfileData.phone,
                 website: decodedProfileData.website,
+                preferences: decodedProfileData.preferences || {
+                  mentor: false,
+                  invest: false,
+                  discuss: false,
+                  collaborate: false,
+                  hire: false,
+                },
               },
             });
 
@@ -204,7 +211,7 @@ export async function GET(request: NextRequest) {
                   phone: decodedProfileData.phone,
                   website: decodedProfileData.website,
                   avatar_url: user.user_metadata?.avatar_url,
-                  preferences: {
+                  preferences: decodedProfileData.preferences || {
                     mentor: false,
                     invest: false,
                     discuss: false,

@@ -34,6 +34,13 @@ interface ProfileFormProps {
     bio?: string;
     location?: string;
     website?: string;
+    preferences?: {
+      mentor: boolean;
+      invest: boolean;
+      discuss: boolean;
+      collaborate: boolean;
+      hire: boolean;
+    };
   };
   onComplete: (profileData: {
     name: string;
@@ -44,6 +51,13 @@ interface ProfileFormProps {
     bio: string;
     location: string;
     website: string;
+    preferences: {
+      mentor: boolean;
+      invest: boolean;
+      discuss: boolean;
+      collaborate: boolean;
+      hire: boolean;
+    };
   }) => void;
 }
 
@@ -60,11 +74,11 @@ export function ProfileForm({ initialData, onComplete }: ProfileFormProps) {
   });
 
   const [preferences, setPreferences] = useState({
-    mentor: false,
-    invest: false,
-    discuss: false,
-    collaborate: false,
-    hire: false,
+    mentor: initialData.preferences?.mentor || false,
+    invest: initialData.preferences?.invest || false,
+    discuss: initialData.preferences?.discuss || false,
+    collaborate: initialData.preferences?.collaborate || false,
+    hire: initialData.preferences?.hire || false,
   });
 
   const handleInputChange = (field: string, value: string) => {
@@ -77,8 +91,11 @@ export function ProfileForm({ initialData, onComplete }: ProfileFormProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Pass the complete profile data back
-    onComplete(formData);
+    // Pass the complete profile data back including preferences
+    onComplete({
+      ...formData,
+      preferences,
+    });
   };
 
   return (
@@ -174,6 +191,16 @@ export function ProfileForm({ initialData, onComplete }: ProfileFormProps) {
                     className="pl-10"
                   />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="website">Website</Label>
+                <Input
+                  id="website"
+                  type="url"
+                  value={formData.website}
+                  onChange={(e) => handleInputChange("website", e.target.value)}
+                  placeholder="https://yourwebsite.com"
+                />
               </div>
             </div>
             <div className="space-y-2">

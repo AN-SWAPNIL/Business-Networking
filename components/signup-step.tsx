@@ -26,6 +26,13 @@ interface SignupStepProps {
     bio: string;
     location: string;
     website: string;
+    preferences: {
+      mentor: boolean;
+      invest: boolean;
+      discuss: boolean;
+      collaborate: boolean;
+      hire: boolean;
+    };
   };
   onComplete: () => void;
 }
@@ -87,6 +94,7 @@ export function SignupStep({ profileData, onComplete }: SignupStepProps) {
             phone: profileData.phone,
             website: profileData.website,
             email: profileData.email,
+            preferences: profileData.preferences,
           },
         }),
       });
@@ -140,6 +148,7 @@ export function SignupStep({ profileData, onComplete }: SignupStepProps) {
             phone: profileData.phone,
             website: profileData.website,
             email: profileData.email,
+            preferences: profileData.preferences,
           },
         }),
       });
