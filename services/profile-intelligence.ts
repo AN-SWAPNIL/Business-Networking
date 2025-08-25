@@ -2,7 +2,7 @@ import {
   ChatGoogleGenerativeAI,
   GoogleGenerativeAIEmbeddings,
 } from "@langchain/google-genai";
-import { TavilySearch } from "@langchain/tavily";
+import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
 import { createClient } from "@supabase/supabase-js";
 import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
 import { Document } from "@langchain/core/documents";
@@ -42,7 +42,7 @@ const UserProfileSchema = z.object({
 export class ProfileIntelligenceService {
   private llmWithTools: ChatGoogleGenerativeAI;
   private embeddings: GoogleGenerativeAIEmbeddings;
-  private searchTool: TavilySearch;
+  private searchTool: TavilySearchResults;
   private supabaseClient: any;
   private vectorStore: SupabaseVectorStore;
   private tools: any[];
@@ -64,25 +64,13 @@ export class ProfileIntelligenceService {
       throw new Error("Supabase environment variables are required");
     }
 
-    // Initialize Tavily search tool (optimized for AI agents and profile intelligence)
-    this.searchTool = new TavilySearch({
-      maxResults: 8,
-      topic: "general",
-      includeAnswer: false,
-      includeRawContent: true, // Get detailed content for better analysis
-      includeImages: false,
-      searchDepth: "advanced", // Use advanced search for better professional results
-      includeDomains: [
-        "linkedin.com",
-        "crunchbase.com",
-        "bloomberg.com",
-        "forbes.com",
-        "techcrunch.com",
-      ], // Focus on professional sources
+    // Initialize Tavily search tool using the official LangChain approach
+    this.searchTool = new TavilySearchResults({
+      maxResults: 5, // More focused results
     });
 
     console.log(
-      "🔍 Tavily Search initialized with advanced settings for profile intelligence"
+      "🔍 TavilySearchResults initialized with LangChain standard approach"
     );
 
     // Define tools for the agent - Tavily is natively compatible with LangChain
@@ -127,13 +115,13 @@ export class ProfileIntelligenceService {
     return new SystemMessage({
       content: `You are a professional profile intelligence analyst. Your task is to research and analyze professionals for business networking purposes.
 
-IMPORTANT: You MUST use the tavily_search tool to gather information. Do not provide analysis without searching first.
+IMPORTANT: You MUST use the tavily_search_results_json tool to gather information. Do not provide analysis without searching first.
 
 Available tools:
-- tavily_search: Use this to search for comprehensive professional information about people and companies
+- tavily_search_results_json: Use this to search for comprehensive professional information about people and companies
 
 Your workflow:
-1. ALWAYS start by using tavily_search to find information about the person
+1. ALWAYS start by using tavily_search_results_json to find information about the person
 2. Search for their professional background, current role, and company
 3. Look for recent achievements, projects, or news
 4. Search for industry insights and company information
@@ -144,6 +132,9 @@ Search strategy:
 - Search for: "{company_name} company information business"
 - Search for: "{person_name} achievements projects career"
 - Search for: "{person_name} LinkedIn professional experience"
+- Search for: "{person_name} {location} professional network"
+- Search for: "{website_domain} about team leadership"
+- Search for: "{person_name} {industry} expertise skills"
 
 After completing your searches, provide your analysis in this exact JSON format:
 {
@@ -442,7 +433,7 @@ Professional Interests: ${Object.entries(userProfile.preferences)
 
       // Create user message for analysis
       const userMessage = new HumanMessage({
-        content: `IMPORTANT: You must use the tavily_search tool to research this person before providing analysis.
+        content: `IMPORTANT: You must use the tavily_search_results_json tool to research this person before providing analysis.
 
 Analyze this professional profile for business networking purposes:
 
@@ -461,13 +452,23 @@ Professional Interests: ${
 
 Step 1: Search for "${validatedProfile.name} ${validatedProfile.title} ${
           validatedProfile.company
-        }" using the tavily_search tool
+        }" using the tavily_search_results_json tool
 Step 2: Search for "${
           validatedProfile.company
-        } company information" using the tavily_search tool  
-Step 3: Based on your research, provide your analysis in the specified JSON format.
+        } company information" using the tavily_search_results_json tool
+Step 3: Search for "${validatedProfile.name} ${
+          validatedProfile.location || "professional"
+        } career achievements" using the tavily_search_results_json tool
+Step 4: Search for "${
+          validatedProfile.website
+            ? validatedProfile.website
+                .replace(/https?:\/\//, "")
+                .split("/")[0] + " about team"
+            : validatedProfile.name + " professional profile"
+        }" using the tavily_search_results_json tool
+Step 5: Based on your comprehensive research, provide your analysis in the specified JSON format.
 
-You MUST use the tavily_search tool before providing any analysis.`,
+You MUST use the tavily_search_results_json tool multiple times before providing any analysis.`,
       });
 
       // Create and run the agent
@@ -497,46 +498,19 @@ You MUST use the tavily_search tool before providing any analysis.`,
         console.log("🔍 Manual search query:", searchQuery);
 
         try {
-          const searchResults = await this.searchTool.invoke({
-            query: searchQuery,
-          });
+          const searchResults = await this.searchTool.invoke(searchQuery);
 
-          // Handle Tavily's structured response format
-          let searchContent = "";
-          if (typeof searchResults === "object" && searchResults.results) {
-            console.log(
-              "🔍 Manual search completed, found",
-              searchResults.results.length,
-              "results"
-            );
-
-            // Format Tavily results for LLM consumption
-            searchContent = searchResults.results
-              .map(
-                (result: any, index: number) =>
-                  `Result ${index + 1}:
-Title: ${result.title}
-URL: ${result.url}
-Content: ${result.content}
----`
-              )
-              .join("\n\n");
-          } else if (typeof searchResults === "string") {
-            searchContent = searchResults;
-            console.log(
-              "🔍 Manual search completed, result length:",
-              searchResults.length
-            );
-          } else {
-            searchContent = JSON.stringify(searchResults);
-            console.log("🔍 Manual search completed with unexpected format");
-          }
+          // TavilySearchResults returns a formatted string ready for LLM consumption
+          console.log(
+            "🔍 Manual search completed, result length:",
+            searchResults.length
+          );
 
           // Add search results to the conversation and get analysis
           const searchMessage = new HumanMessage({
             content: `Here are the search results for ${validatedProfile.name}:
 
-${searchContent}
+${searchResults}
 
 Based on this information, please provide your analysis in the specified JSON format.`,
           });

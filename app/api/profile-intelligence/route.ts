@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import { ProfileIntelligenceService } from "@/services/profile-intelligence-new";
+import { ProfileIntelligenceService } from "@/services/profile-intelligence";
 
 export async function POST(request: NextRequest) {
   try {

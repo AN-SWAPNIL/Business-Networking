@@ -45,6 +45,7 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
   }, []);
 
   const loadIntelligence = async () => {
+    setIsLoading(true);
     try {
       const result = await getProfileIntelligence();
       console.log("🔍 GET response:", result);
@@ -69,6 +70,7 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
     } catch (error) {
       console.error("Failed to load intelligence:", error);
     } finally {
+      setIsLoading(false);
       setInitialLoading(false);
     }
   };
