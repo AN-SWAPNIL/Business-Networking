@@ -364,3 +364,71 @@ export async function deleteAccount(
     };
   }
 }
+
+/**
+ * Trigger profile intelligence processing
+ */
+export async function triggerProfileIntelligence(): Promise<{
+  success: boolean;
+  analysis?: string;
+  summary?: string;
+  error?: string;
+}> {
+  try {
+    const response = await fetch('/api/profile-intelligence', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
+    console.error("Error triggering profile intelligence:", err);
+
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Get existing profile intelligence data
+ */
+export async function getProfileIntelligence(): Promise<{
+  success: boolean;
+  hasIntelligence: boolean;
+  summary?: string;
+  analysis?: string;
+  lastUpdated?: string;
+  error?: string;
+}> {
+  try {
+    const response = await fetch('/api/profile-intelligence', {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
+    console.error("Error fetching profile intelligence:", err);
+
+    return {
+      success: false,
+      hasIntelligence: false,
+      error: errorMessage,
+    };
+  }
+}

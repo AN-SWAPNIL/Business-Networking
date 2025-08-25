@@ -54,6 +54,7 @@ export async function updateSession(request: NextRequest) {
     "/matches",
     "/api/profile",
     "/api/account",
+    "/api/profile-intelligence",
   ];
 
   const currentPath = request.nextUrl.pathname;

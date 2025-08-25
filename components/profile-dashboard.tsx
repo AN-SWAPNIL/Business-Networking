@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { EditProfileModal } from "@/components/edit-profile-modal";
 import { ProfileSettings } from "@/components/profile-settings";
+import { ProfileIntelligence } from "@/components/profile-intelligence";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { getUserProfile, UserProfile } from "@/lib/api";
@@ -396,6 +397,15 @@ export function ProfileDashboard() {
                   </p>
                 </CardContent>
               </Card>
+
+              {/* AI Profile Intelligence */}
+              <ProfileIntelligence 
+                userProfile={{
+                  name: profile.name,
+                  title: profile.title,
+                  company: profile.company,
+                }}
+              />
 
               <Card>
                 <CardHeader>
