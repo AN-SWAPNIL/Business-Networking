@@ -13,6 +13,16 @@ interface ProfileIntelligenceProps {
     name?: string;
     title?: string;
     company?: string;
+    location?: string;
+    bio?: string;
+    website?: string;
+    preferences?: {
+      mentor: boolean;
+      invest: boolean;
+      discuss: boolean;
+      collaborate: boolean;
+      hire: boolean;
+    };
   };
 }
 
