@@ -375,10 +375,10 @@ export async function triggerProfileIntelligence(): Promise<{
   error?: string;
 }> {
   try {
-    const response = await fetch('/api/profile-intelligence', {
-      method: 'POST',
+    const response = await fetch("/api/profile-intelligence", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     });
 
@@ -389,7 +389,8 @@ export async function triggerProfileIntelligence(): Promise<{
     const result = await response.json();
     return result;
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
+    const errorMessage =
+      err instanceof Error ? err.message : "Unknown error occurred";
     console.error("Error triggering profile intelligence:", err);
 
     return {
@@ -411,8 +412,8 @@ export async function getProfileIntelligence(): Promise<{
   error?: string;
 }> {
   try {
-    const response = await fetch('/api/profile-intelligence', {
-      method: 'GET',
+    const response = await fetch("/api/profile-intelligence", {
+      method: "GET",
     });
 
     if (!response.ok) {
@@ -422,7 +423,8 @@ export async function getProfileIntelligence(): Promise<{
     const result = await response.json();
     return result;
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
+    const errorMessage =
+      err instanceof Error ? err.message : "Unknown error occurred";
     console.error("Error fetching profile intelligence:", err);
 
     return {

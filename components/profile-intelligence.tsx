@@ -23,7 +23,7 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
     analysis?: string;
     lastUpdated?: string;
   }>({ hasIntelligence: false });
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -57,17 +57,18 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
     if (!userProfile?.name || (!userProfile?.company && !userProfile?.title)) {
       toast({
         title: "Profile Incomplete",
-        description: "Please add your name and either company or title to generate AI insights.",
+        description:
+          "Please add your name and either company or title to generate AI insights.",
         variant: "destructive",
       });
       return;
     }
 
     setIsProcessing(true);
-    
+
     try {
       const result = await triggerProfileIntelligence();
-      
+
       if (result.success) {
         // Update local state with new intelligence
         setIntelligence({
@@ -76,15 +77,17 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
           analysis: result.analysis,
           lastUpdated: new Date().toISOString(),
         });
-        
+
         toast({
           title: "AI Insights Generated! 🧠",
-          description: "Your professional profile has been analyzed with AI-powered insights.",
+          description:
+            "Your professional profile has been analyzed with AI-powered insights.",
         });
       } else {
         toast({
           title: "Failed to Generate Insights",
-          description: result.error || "Something went wrong. Please try again.",
+          description:
+            result.error || "Something went wrong. Please try again.",
           variant: "destructive",
         });
       }
@@ -141,7 +144,7 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
               Powered by Gemini 1.5 Flash
             </Badge>
           </CardTitle>
-          
+
           <Button
             onClick={handleTriggerIntelligence}
             disabled={isProcessing}
@@ -161,24 +164,25 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
             )}
           </Button>
         </div>
-        
+
         {intelligence.lastUpdated && (
           <p className="text-sm text-muted-foreground">
             Last updated: {formatDate(intelligence.lastUpdated)}
           </p>
         )}
       </CardHeader>
-      
+
       <CardContent>
         {!intelligence.hasIntelligence ? (
           <div className="text-center py-8">
             <Brain className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">No AI Insights Yet</h3>
             <p className="text-muted-foreground mb-4">
-              Generate AI-powered insights about your professional background, company, and networking potential.
+              Generate AI-powered insights about your professional background,
+              company, and networking potential.
             </p>
-            <Button 
-              onClick={handleTriggerIntelligence} 
+            <Button
+              onClick={handleTriggerIntelligence}
               disabled={isProcessing}
               className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
             >
@@ -210,7 +214,7 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
                 </div>
               </div>
             )}
-            
+
             {intelligence.analysis && (
               <div>
                 <h4 className="font-semibold text-lg mb-2 flex items-center gap-2">

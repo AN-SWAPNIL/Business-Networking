@@ -144,46 +144,59 @@ export async function PUT(request: NextRequest) {
 
     // Trigger profile intelligence in the background for important field updates
     const hasImportantUpdates = !!(
-      validatedData.name || 
-      validatedData.title || 
-      validatedData.company || 
-      validatedData.location || 
-      validatedData.bio || 
-      validatedData.phone || 
-      validatedData.website || 
+      validatedData.name ||
+      validatedData.title ||
+      validatedData.company ||
+      validatedData.location ||
+      validatedData.bio ||
+      validatedData.phone ||
+      validatedData.website ||
       validatedData.preferences
     );
-    
-    if (hasImportantUpdates && updatedProfile.name && (updatedProfile.company || updatedProfile.title)) {
+
+    if (
+      hasImportantUpdates &&
+      updatedProfile.name &&
+      (updatedProfile.company || updatedProfile.title)
+    ) {
       try {
         // Make async call to profile intelligence API
-        const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        const origin =
+          request.headers.get("origin") ||
+          process.env.NEXT_PUBLIC_APP_URL ||
+          "http://localhost:3000";
         const intelligenceUrl = `${origin}/api/profile-intelligence`;
-        
+
         // Fire and forget - don't wait for completion
         fetch(intelligenceUrl, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Authorization': request.headers.get('Authorization') || '',
-            'Cookie': request.headers.get('Cookie') || '',
-            'Content-Type': 'application/json',
+            Authorization: request.headers.get("Authorization") || "",
+            Cookie: request.headers.get("Cookie") || "",
+            "Content-Type": "application/json",
           },
-        }).catch(error => {
-          console.log("Profile intelligence trigger failed (background process):", error.message);
+        }).catch((error) => {
+          console.log(
+            "Profile intelligence trigger failed (background process):",
+            error.message
+          );
         });
-        
+
         const updatedFields = [
-          validatedData.name && 'name',
-          validatedData.title && 'title',
-          validatedData.company && 'company',
-          validatedData.location && 'location',
-          validatedData.bio && 'bio',
-          validatedData.phone && 'phone',
-          validatedData.website && 'website',
-          validatedData.preferences && 'preferences'
+          validatedData.name && "name",
+          validatedData.title && "title",
+          validatedData.company && "company",
+          validatedData.location && "location",
+          validatedData.bio && "bio",
+          validatedData.phone && "phone",
+          validatedData.website && "website",
+          validatedData.preferences && "preferences",
         ].filter(Boolean);
-        
-        console.log("🧠 Profile intelligence triggered in background for field updates:", updatedFields);
+
+        console.log(
+          "🧠 Profile intelligence triggered in background for field updates:",
+          updatedFields
+        );
       } catch (error) {
         console.log("Failed to trigger profile intelligence:", error);
         // Don't fail the main request

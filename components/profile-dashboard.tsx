@@ -399,7 +399,7 @@ export function ProfileDashboard() {
               </Card>
 
               {/* AI Profile Intelligence */}
-              <ProfileIntelligence 
+              <ProfileIntelligence
                 userProfile={{
                   name: profile.name,
                   title: profile.title,

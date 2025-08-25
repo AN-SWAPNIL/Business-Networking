@@ -27,18 +27,16 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (profileError || !profile) {
-      return NextResponse.json(
-        { error: "Profile not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
     // Validate required fields for intelligence processing
     if (!profile.name || (!profile.company && !profile.title)) {
       return NextResponse.json(
-        { 
-          error: "Profile needs at least name and (company or title) for intelligence processing",
-          success: false 
+        {
+          error:
+            "Profile needs at least name and (company or title) for intelligence processing",
+          success: false,
         },
         { status: 400 }
       );
@@ -48,10 +46,14 @@ export async function POST(request: NextRequest) {
 
     // Process profile intelligence
     const intelligenceService = new ProfileIntelligenceService();
-    const result = await intelligenceService.processProfileIntelligence(profile);
+    const result = await intelligenceService.processProfileIntelligence(
+      profile
+    );
 
     if (result.success) {
-      console.log(`✅ Profile intelligence completed for user: ${profile.name}`);
+      console.log(
+        `✅ Profile intelligence completed for user: ${profile.name}`
+      );
       return NextResponse.json({
         success: true,
         message: "Profile intelligence processed successfully",
@@ -59,7 +61,10 @@ export async function POST(request: NextRequest) {
         summary: result.summary,
       });
     } else {
-      console.error(`❌ Profile intelligence failed for user: ${profile.name}`, result.error);
+      console.error(
+        `❌ Profile intelligence failed for user: ${profile.name}`,
+        result.error
+      );
       return NextResponse.json(
         {
           success: false,
@@ -73,7 +78,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error occurred",
+        error:
+          error instanceof Error ? error.message : "Unknown error occurred",
       },
       { status: 500 }
     );
@@ -124,11 +130,13 @@ export async function GET(request: NextRequest) {
 
     const doc = documents[0];
     const content = doc.content;
-    
+
     // Parse the content to extract summary and analysis
-    const summaryMatch = content.match(/Professional Summary:\n([\s\S]*?)\n\nDetailed Analysis:/);
+    const summaryMatch = content.match(
+      /Professional Summary:\n([\s\S]*?)\n\nDetailed Analysis:/
+    );
     const analysisMatch = content.match(/Detailed Analysis:\n([\s\S]*)$/);
-    
+
     const summary = summaryMatch ? summaryMatch[1].trim() : "";
     const analysis = analysisMatch ? analysisMatch[1].trim() : "";
 

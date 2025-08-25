@@ -230,30 +230,45 @@ export async function GET(request: NextRequest) {
               );
             } else {
               console.log("Successfully updated users table:", upsertData);
-              
+
               // Trigger profile intelligence for new signup with profile data
-              if (upsertData && upsertData[0] && decodedProfileData.name && (decodedProfileData.company || decodedProfileData.title)) {
+              if (
+                upsertData &&
+                upsertData[0] &&
+                decodedProfileData.name &&
+                (decodedProfileData.company || decodedProfileData.title)
+              ) {
                 try {
                   const intelligenceUrl = `${origin}/api/profile-intelligence`;
-                  
+
                   // Create a temporary session for the API call
-                  const { data: sessionData } = await supabase.auth.getSession();
+                  const { data: sessionData } =
+                    await supabase.auth.getSession();
                   if (sessionData.session) {
                     // Fire and forget - don't wait for completion
                     fetch(intelligenceUrl, {
-                      method: 'POST',
+                      method: "POST",
                       headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${sessionData.session.access_token}`,
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${sessionData.session.access_token}`,
                       },
-                    }).catch(error => {
-                      console.log("Profile intelligence trigger failed (background process):", error.message);
+                    }).catch((error) => {
+                      console.log(
+                        "Profile intelligence trigger failed (background process):",
+                        error.message
+                      );
                     });
-                    
-                    console.log("🧠 Profile intelligence triggered in background for new signup:", decodedProfileData.name);
+
+                    console.log(
+                      "🧠 Profile intelligence triggered in background for new signup:",
+                      decodedProfileData.name
+                    );
                   }
                 } catch (error) {
-                  console.log("Failed to trigger profile intelligence for signup:", error);
+                  console.log(
+                    "Failed to trigger profile intelligence for signup:",
+                    error
+                  );
                   // Don't fail the main request
                 }
               }
