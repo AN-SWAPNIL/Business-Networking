@@ -47,13 +47,24 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
   const loadIntelligence = async () => {
     try {
       const result = await getProfileIntelligence();
+      console.log("🔍 GET response:", result);
+
       if (result.success) {
+        console.log("✅ Setting intelligence state:", {
+          hasIntelligence: result.hasIntelligence,
+          summary: result.summary?.substring(0, 100) + "...",
+          analysis: result.analysis?.substring(0, 100) + "...",
+          lastUpdated: result.lastUpdated,
+        });
+
         setIntelligence({
           hasIntelligence: result.hasIntelligence,
           summary: result.summary,
           analysis: result.analysis,
           lastUpdated: result.lastUpdated,
         });
+      } else {
+        console.log("❌ GET failed:", result.error);
       }
     } catch (error) {
       console.error("Failed to load intelligence:", error);
@@ -156,20 +167,20 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
           </CardTitle>
 
           <Button
-            onClick={handleTriggerIntelligence}
-            disabled={isProcessing}
+            onClick={loadIntelligence}
+            disabled={isLoading}
             size="sm"
             variant="outline"
           >
-            {isProcessing ? (
+            {isLoading ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Analyzing...
+                Loading...
               </>
             ) : (
               <>
                 <RefreshCw className="h-4 w-4 mr-2" />
-                {intelligence.hasIntelligence ? "Refresh" : "Generate"} Insights
+                Refresh
               </>
             )}
           </Button>
@@ -237,6 +248,37 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
                       {intelligence.analysis}
                     </p>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Regenerate button at the bottom for easy access */}
+            {intelligence.hasIntelligence && (
+              <div className="pt-4 border-t">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Want fresh insights? Regenerate your AI analysis with new
+                    search data.
+                  </p>
+                  <Button
+                    onClick={handleTriggerIntelligence}
+                    disabled={isProcessing}
+                    variant="outline"
+                    size="sm"
+                    className="ml-4"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Regenerating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Regenerate
+                      </>
+                    )}
+                  </Button>
                 </div>
               </div>
             )}

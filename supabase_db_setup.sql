@@ -75,9 +75,10 @@ CREATE TABLE IF NOT EXISTS business_cards (
 -- Vector embeddings for LangChain integration - ONLY for AI agent operations
 CREATE TABLE IF NOT EXISTS documents (
   id bigserial PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   content TEXT NOT NULL, -- corresponds to Document.pageContent in LangChain
   metadata JSONB DEFAULT '{}'::jsonb, -- corresponds to Document.metadata in LangChain
-  embedding VECTOR(1536), -- 1536 works for OpenAI embeddings, change if needed
+  embedding VECTOR(768), -- 768 dimensions for Google Gemini embeddings
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -152,6 +153,7 @@ CREATE INDEX IF NOT EXISTS idx_business_cards_created_at ON business_cards(creat
 CREATE INDEX IF NOT EXISTS idx_documents_embedding ON documents 
   USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 CREATE INDEX IF NOT EXISTS idx_documents_metadata ON documents USING GIN(metadata);
+CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
 
 -- Connections indexes
 CREATE INDEX IF NOT EXISTS idx_connections_requester_id ON connections(requester_id);
@@ -203,18 +205,18 @@ CREATE POLICY "Users can view public profiles" ON users
 CREATE POLICY "Users can manage own business cards" ON business_cards
   FOR ALL USING (auth.uid() = user_id);
 
--- Documents (vector embeddings) policies - AI agents can read/write based on metadata
-CREATE POLICY "Users can view documents with their user_id in metadata" ON documents
-  FOR SELECT USING (
-    (metadata->>'user_id')::uuid = auth.uid() OR 
-    metadata->>'visibility' = 'public'
-  );
+-- Documents (vector embeddings) policies - AI agents can read/write based on user_id
+CREATE POLICY "Users can view own documents" ON documents
+  FOR SELECT USING (user_id = auth.uid());
 
-CREATE POLICY "Users can insert documents with their user_id in metadata" ON documents
-  FOR INSERT WITH CHECK ((metadata->>'user_id')::uuid = auth.uid());
+CREATE POLICY "Users can insert own documents" ON documents
+  FOR INSERT WITH CHECK (user_id = auth.uid());
 
 CREATE POLICY "Users can update own documents" ON documents
-  FOR UPDATE USING ((metadata->>'user_id')::uuid = auth.uid());
+  FOR UPDATE USING (user_id = auth.uid());
+
+CREATE POLICY "Users can delete own documents" ON documents
+  FOR DELETE USING (user_id = auth.uid());
 
 -- Connections policies
 CREATE POLICY "Users can view own connections" ON connections
@@ -303,11 +305,13 @@ $$ LANGUAGE plpgsql;
 
 -- Function for LangChain vector similarity search
 CREATE OR REPLACE FUNCTION public.match_documents (
-  query_embedding VECTOR(1536),
+  query_embedding VECTOR(768),
   match_count INT DEFAULT NULL,
-  filter JSONB DEFAULT '{}'
+  filter JSONB DEFAULT '{}',
+  user_id_filter UUID DEFAULT NULL
 ) RETURNS TABLE (
   id BIGINT,
+  user_id UUID,
   content TEXT,
   metadata JSONB,
   similarity FLOAT
@@ -318,12 +322,14 @@ AS $$
 BEGIN
   RETURN QUERY
   SELECT
-    id,
-    content,
-    metadata,
+    documents.id,
+    documents.user_id,
+    documents.content,
+    documents.metadata,
     1 - (documents.embedding <=> query_embedding) AS similarity
   FROM documents
   WHERE metadata @> filter
+    AND (user_id_filter IS NULL OR documents.user_id = user_id_filter)
   ORDER BY documents.embedding <=> query_embedding
   LIMIT match_count;
 END;

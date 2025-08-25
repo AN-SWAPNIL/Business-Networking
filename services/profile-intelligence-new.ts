@@ -53,10 +53,6 @@ export class ProfileIntelligenceService {
       throw new Error("GOOGLE_API_KEY environment variable is required");
     }
 
-    if (!process.env.GOOGLE_SEARCH_API_KEY) {
-      throw new Error("GOOGLE_SEARCH_API_KEY environment variable is required");
-    }
-
     if (!process.env.GOOGLE_CSE_ID) {
       throw new Error("GOOGLE_CSE_ID environment variable is required");
     }
