@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { ProfileIntelligenceService } from "@/services/profile-intelligence";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -234,25 +235,54 @@ export async function GET(request: NextRequest) {
               // Trigger profile intelligence in the background for new signups
               if (upsertData && upsertData.length > 0) {
                 const updatedUser = upsertData[0];
-                if (updatedUser.name && (updatedUser.company || updatedUser.title)) {
+                if (
+                  updatedUser.name &&
+                  (updatedUser.company || updatedUser.title)
+                ) {
                   try {
-                    // Make async call to profile intelligence API
-                    const intelligenceUrl = `${origin}/api/profile-intelligence`;
+                    console.log(
+                      "🧠 Starting profile intelligence for new signup - WAITING FOR COMPLETION"
+                    );
                     
-                    // Create a minimal request context for the API call
-                    fetch(intelligenceUrl, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${code}`, // Use the auth code temporarily
-                      },
-                    }).catch(error => {
-                      console.log("Profile intelligence trigger failed for new signup (background process):", error.message);
-                    });
-                    
-                    console.log("🧠 Profile intelligence triggered for new signup");
+                    const intelligenceService =
+                      new ProfileIntelligenceService();
+
+                    // Wait for completion to see any errors
+                    const result =  await intelligenceService.processProfileIntelligence({
+                        id: updatedUser.id,
+                        name: updatedUser.name,
+                        email: updatedUser.email,
+                        title: updatedUser.title,
+                        company: updatedUser.company,
+                        location: updatedUser.location,
+                        bio: updatedUser.bio,
+                        website: updatedUser.website,
+                        preferences: updatedUser.preferences,
+                      });
+
+                    if (result.success) {
+                      console.log(
+                        "✅ Profile intelligence completed for new signup:",
+                        updatedUser.name
+                      );
+                      console.log(
+                        "📄 Analysis generated:",
+                        result.analysis ? "Yes" : "No"
+                      );
+                    } else {
+                      console.log(
+                        "❌ Profile intelligence failed for new signup:",
+                        result.error
+                      );
+                    }
                   } catch (error) {
-                    console.log("Failed to trigger profile intelligence for signup:", error);
+                    console.log(
+                      "❌ Profile intelligence error for new signup:",
+                      error
+                    );
+                    if (error instanceof Error) {
+                      console.log("Error details:", error.stack);
+                    }
                     // Don't fail the main request
                   }
                 }
