@@ -386,6 +386,9 @@ export function ProfileDashboard() {
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
+              {/* AI Profile Intelligence */}
+              <ProfileIntelligence userProfile={profile} />
+
               <Card>
                 <CardHeader>
                   <CardTitle className="font-serif">About</CardTitle>
@@ -397,15 +400,6 @@ export function ProfileDashboard() {
                   </p>
                 </CardContent>
               </Card>
-
-              {/* AI Profile Intelligence */}
-              <ProfileIntelligence
-                userProfile={{
-                  name: profile.name,
-                  title: profile.title,
-                  company: profile.company,
-                }}
-              />
 
               <Card>
                 <CardHeader>

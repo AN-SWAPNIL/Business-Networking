@@ -365,15 +365,30 @@ export async function deleteAccount(
   }
 }
 
-/**
- * Trigger profile intelligence processing
- */
-export async function triggerProfileIntelligence(): Promise<{
+// Profile Intelligence API types and functions
+export interface ProfileIntelligenceResponse {
   success: boolean;
+  message?: string;
   analysis?: string;
   summary?: string;
   error?: string;
-}> {
+}
+
+export interface ProfileIntelligenceData {
+  success: boolean;
+  hasIntelligence: boolean;
+  summary?: string;
+  analysis?: string;
+  lastUpdated?: string;
+  metadata?: any;
+  message?: string;
+  error?: string;
+}
+
+/**
+ * Trigger profile intelligence processing
+ */
+export async function triggerProfileIntelligence(): Promise<ProfileIntelligenceResponse> {
   try {
     const response = await fetch("/api/profile-intelligence", {
       method: "POST",
@@ -401,19 +416,15 @@ export async function triggerProfileIntelligence(): Promise<{
 }
 
 /**
- * Get existing profile intelligence data
+ * Get profile intelligence data
  */
-export async function getProfileIntelligence(): Promise<{
-  success: boolean;
-  hasIntelligence: boolean;
-  summary?: string;
-  analysis?: string;
-  lastUpdated?: string;
-  error?: string;
-}> {
+export async function getProfileIntelligence(): Promise<ProfileIntelligenceData> {
   try {
     const response = await fetch("/api/profile-intelligence", {
       method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
     });
 
     if (!response.ok) {

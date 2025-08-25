@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { NextRequest, NextResponse } from "next/server";
 import { ProfileIntelligenceService } from "@/services/profile-intelligence";
 
 export async function POST(request: NextRequest) {
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get user profile from database
+    // Get the user profile from database
     const { data: profile, error: profileError } = await supabase
       .from("users")
       .select("*")
@@ -27,65 +27,63 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (profileError || !profile) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+      console.error("Error fetching profile:", profileError);
+      return NextResponse.json(
+        { error: "Profile not found" },
+        { status: 404 }
+      );
     }
 
-    // Validate required fields for intelligence processing
+    // Check if we have enough information to process
     if (!profile.name || (!profile.company && !profile.title)) {
       return NextResponse.json(
-        {
-          error:
-            "Profile needs at least name and (company or title) for intelligence processing",
+        { 
           success: false,
+          error: "Insufficient profile information. Please add at least your name and either company or title." 
         },
         { status: 400 }
       );
     }
 
-    console.log(`🧠 Processing profile intelligence for user: ${profile.name}`);
+    console.log(`🚀 Triggering profile intelligence for user: ${profile.name}`);
 
-    // Process profile intelligence
+    // Initialize and run profile intelligence service
     const intelligenceService = new ProfileIntelligenceService();
-    const result = await intelligenceService.processProfileIntelligence(
-      profile
-    );
+    const result = await intelligenceService.processProfileIntelligence(profile);
 
-    if (result.success) {
-      console.log(
-        `✅ Profile intelligence completed for user: ${profile.name}`
-      );
-      return NextResponse.json({
-        success: true,
-        message: "Profile intelligence processed successfully",
-        analysis: result.analysis,
-        summary: result.summary,
-      });
-    } else {
-      console.error(
-        `❌ Profile intelligence failed for user: ${profile.name}`,
-        result.error
-      );
+    if (!result.success) {
+      console.error("Profile intelligence failed:", result.error);
       return NextResponse.json(
-        {
-          success: false,
-          error: result.error,
+        { 
+          success: false, 
+          error: result.error || "Failed to process profile intelligence" 
         },
         { status: 500 }
       );
     }
+
+    console.log(`✅ Profile intelligence completed for user: ${profile.name}`);
+
+    return NextResponse.json({
+      success: true,
+      message: "Profile intelligence processing completed successfully",
+      analysis: result.analysis,
+      summary: result.summary,
+    });
+
   } catch (error) {
     console.error("Error in profile intelligence API:", error);
     return NextResponse.json(
-      {
+      { 
         success: false,
-        error:
-          error instanceof Error ? error.message : "Unknown error occurred",
+        error: error instanceof Error ? error.message : "Internal server error" 
       },
       { status: 500 }
     );
   }
 }
 
+// Get profile intelligence results
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -103,19 +101,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get existing intelligence data from vector store
-    const { data: documents, error: docError } = await supabase
+    // Get the vector document for this user
+    const { data: documents, error } = await supabase
       .from("documents")
-      .select("content, metadata")
+      .select("*")
       .eq("metadata->>user_id", user.id)
       .eq("metadata->>type", "profile_intelligence")
-      .order("metadata->>created_at", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(1);
 
-    if (docError) {
-      console.error("Error fetching intelligence data:", docError);
+    if (error) {
+      console.error("Error fetching profile intelligence:", error);
       return NextResponse.json(
-        { error: "Failed to fetch intelligence data" },
+        { error: "Failed to fetch profile intelligence" },
         { status: 500 }
       );
     }
@@ -124,19 +122,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         hasIntelligence: false,
-        message: "No intelligence data found",
+        message: "No profile intelligence found",
       });
     }
 
-    const doc = documents[0];
-    const content = doc.content;
-
-    // Parse the content to extract summary and analysis
-    const summaryMatch = content.match(
-      /Professional Summary:\n([\s\S]*?)\n\nDetailed Analysis:/
-    );
-    const analysisMatch = content.match(/Detailed Analysis:\n([\s\S]*)$/);
-
+    const document = documents[0];
+    const content = document.content;
+    
+    // Extract summary and analysis from content
+    const summaryMatch = content.match(/Professional Summary:[\s\S]*?([\s\S]*?)[\s\S]*?Detailed Analysis:/);
+    const analysisMatch = content.match(/Detailed Analysis:[\s\S]*?([\s\S]*?)[\s\S]*?Professional Interests:/);
+    
     const summary = summaryMatch ? summaryMatch[1].trim() : "";
     const analysis = analysisMatch ? analysisMatch[1].trim() : "";
 
@@ -145,8 +141,10 @@ export async function GET(request: NextRequest) {
       hasIntelligence: true,
       summary,
       analysis,
-      lastUpdated: doc.metadata.created_at,
+      lastUpdated: document.metadata.created_at,
+      metadata: document.metadata,
     });
+
   } catch (error) {
     console.error("Error fetching profile intelligence:", error);
     return NextResponse.json(

@@ -231,45 +231,30 @@ export async function GET(request: NextRequest) {
             } else {
               console.log("Successfully updated users table:", upsertData);
 
-              // Trigger profile intelligence for new signup with profile data
-              if (
-                upsertData &&
-                upsertData[0] &&
-                decodedProfileData.name &&
-                (decodedProfileData.company || decodedProfileData.title)
-              ) {
-                try {
-                  const intelligenceUrl = `${origin}/api/profile-intelligence`;
-
-                  // Create a temporary session for the API call
-                  const { data: sessionData } =
-                    await supabase.auth.getSession();
-                  if (sessionData.session) {
-                    // Fire and forget - don't wait for completion
+              // Trigger profile intelligence in the background for new signups
+              if (upsertData && upsertData.length > 0) {
+                const updatedUser = upsertData[0];
+                if (updatedUser.name && (updatedUser.company || updatedUser.title)) {
+                  try {
+                    // Make async call to profile intelligence API
+                    const intelligenceUrl = `${origin}/api/profile-intelligence`;
+                    
+                    // Create a minimal request context for the API call
                     fetch(intelligenceUrl, {
-                      method: "POST",
+                      method: 'POST',
                       headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${sessionData.session.access_token}`,
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${code}`, // Use the auth code temporarily
                       },
-                    }).catch((error) => {
-                      console.log(
-                        "Profile intelligence trigger failed (background process):",
-                        error.message
-                      );
+                    }).catch(error => {
+                      console.log("Profile intelligence trigger failed for new signup (background process):", error.message);
                     });
-
-                    console.log(
-                      "🧠 Profile intelligence triggered in background for new signup:",
-                      decodedProfileData.name
-                    );
+                    
+                    console.log("🧠 Profile intelligence triggered for new signup");
+                  } catch (error) {
+                    console.log("Failed to trigger profile intelligence for signup:", error);
+                    // Don't fail the main request
                   }
-                } catch (error) {
-                  console.log(
-                    "Failed to trigger profile intelligence for signup:",
-                    error
-                  );
-                  // Don't fail the main request
                 }
               }
             }
