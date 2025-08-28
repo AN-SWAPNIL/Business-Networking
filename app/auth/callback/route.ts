@@ -135,22 +135,7 @@ export async function GET(request: NextRequest) {
               //   profile: decodedProfileData
               // });
 
-              // First delete from public.users table (in case it was created by trigger)
-              const { error: publicDeleteError } = await supabaseAdmin
-                .from("users")
-                .delete()
-                .eq("id", user.id);
-
-              if (publicDeleteError) {
-                console.error(
-                  "Failed to delete from public.users:",
-                  publicDeleteError
-                );
-              } else {
-                console.log("✅ Successfully deleted from public.users");
-              }
-
-              // Then delete from auth.users table
+              // Delete auth user (this will cascade to public.users if it exists)
               const { error: authDeleteError } =
                 await supabaseAdmin.auth.admin.deleteUser(user.id);
 
@@ -160,7 +145,9 @@ export async function GET(request: NextRequest) {
                   authDeleteError
                 );
               } else {
-                console.log("✅ Successfully deleted from auth.users");
+                console.log(
+                  "✅ Successfully deleted from auth.users (cascaded to public.users)"
+                );
               }
 
               await supabase.auth.signOut();
@@ -243,12 +230,13 @@ export async function GET(request: NextRequest) {
                     console.log(
                       "🧠 Starting profile intelligence for new signup - WAITING FOR COMPLETION"
                     );
-                    
+
                     const intelligenceService =
                       new ProfileIntelligenceService();
 
                     // Wait for completion to see any errors
-                    const result =  await intelligenceService.processProfileIntelligence({
+                    const result =
+                      await intelligenceService.processProfileIntelligence({
                         id: updatedUser.id,
                         name: updatedUser.name,
                         email: updatedUser.email,
@@ -369,27 +357,12 @@ export async function GET(request: NextRequest) {
               );
 
               if (isNewlyCreated) {
-                // This user was just auto-created by the trigger - delete both
+                // This user was just auto-created by the trigger - delete from auth
                 console.log(
-                  "🚫 Detecting unauthorized OAuth signup - deleting user from both auth.users and public.users"
+                  "🚫 Detecting unauthorized OAuth signup - deleting user from auth.users (will cascade)"
                 );
 
-                // First delete from public.users table
-                const { error: publicDeleteError } = await supabaseAdmin
-                  .from("users")
-                  .delete()
-                  .eq("id", user.id);
-
-                if (publicDeleteError) {
-                  console.error(
-                    "Failed to delete from public.users:",
-                    publicDeleteError
-                  );
-                } else {
-                  console.log("✅ Successfully deleted from public.users");
-                }
-
-                // Then delete from auth.users table
+                // Delete from auth.users table (this will cascade to public.users)
                 const { error: authDeleteError } =
                   await supabaseAdmin.auth.admin.deleteUser(user.id);
 
@@ -399,7 +372,9 @@ export async function GET(request: NextRequest) {
                     authDeleteError
                   );
                 } else {
-                  console.log("✅ Successfully deleted from auth.users");
+                  console.log(
+                    "✅ Successfully deleted from auth.users (cascaded to public.users)"
+                  );
                 }
 
                 // Sign out and redirect to login with error

@@ -210,41 +210,23 @@ export async function DELETE(request: NextRequest) {
 
     console.log("🗑️ Starting account deletion process for user:", user.id);
 
-    // Step 1: Delete from public.users table first (this will cascade to related data)
-    const { error: publicDeleteError } = await supabaseAdmin
-      .from("users")
-      .delete()
-      .eq("id", user.id);
-
-    if (publicDeleteError) {
-      console.error("Failed to delete from public.users:", publicDeleteError);
-      return NextResponse.json(
-        { error: "Failed to delete user profile" },
-        { status: 500 }
-      );
-    }
-
-    console.log("✅ Successfully deleted from public.users");
-
-    // Step 2: Delete from auth.users table
+    // Delete from auth.users table - this will cascade to public.users and all related data
     const { error: authDeleteError } =
       await supabaseAdmin.auth.admin.deleteUser(user.id);
 
     if (authDeleteError) {
       console.error("Failed to delete from auth.users:", authDeleteError);
-      // Even if auth deletion fails, the user data is already deleted
-      // This is a partial success scenario
-      return NextResponse.json({
-        success: true,
-        message:
-          "Account data deleted successfully. Please clear your browser cache and cookies.",
-        warning: "Authentication cleanup may require manual intervention.",
-      });
+      return NextResponse.json(
+        { error: "Failed to delete user account" },
+        { status: 500 }
+      );
     }
 
-    console.log("✅ Successfully deleted from auth.users");
+    console.log(
+      "✅ Successfully deleted from auth.users (cascaded to all related data)"
+    );
 
-    // Step 3: Sign out the user
+    // Sign out the user
     await supabase.auth.signOut();
 
     return NextResponse.json({

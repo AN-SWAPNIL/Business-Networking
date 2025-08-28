@@ -5,7 +5,7 @@ A professional networking platform built with Next.js and Supabase.
 ## Setup
 
 1. Install dependencies: `pnpm install`
-2. Copy `.env.example` to `.env.local` and fill in your Supabase credentials
+2. Copy `.env.example` to `.env.local` and fill in your credentials
 3. Run development server: `pnpm dev`
 
 ## Features

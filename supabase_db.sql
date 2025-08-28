@@ -12,7 +12,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Users table (extends auth.users)
 CREATE TABLE IF NOT EXISTS users (
-  id UUID REFERENCES auth.users(id) PRIMARY KEY,
+  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   title TEXT,
