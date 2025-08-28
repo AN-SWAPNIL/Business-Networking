@@ -25,11 +25,11 @@ const UserProfileSchema = z.object({
   id: z.string(),
   name: z.string(),
   email: z.string(),
-  title: z.string().optional(),
-  company: z.string().optional(),
-  location: z.string().optional(),
-  bio: z.string().optional(),
-  website: z.string().optional(),
+  title: z.string().nullable().optional(),
+  company: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
+  bio: z.string().nullable().optional(),
+  website: z.string().nullable().optional(),
   preferences: z.object({
     mentor: z.boolean(),
     invest: z.boolean(),
@@ -81,7 +81,7 @@ export class ProfileIntelligenceService {
     const baseLLM = new ChatGoogleGenerativeAI({
       model: "gemini-1.5-flash",
       apiKey: process.env.GOOGLE_API_KEY,
-      temperature: 0.3,
+      temperature: 0.7, // Increased for more creative and informative analysis
     });
 
     this.llmWithTools = baseLLM.bindTools(this.tools) as ChatGoogleGenerativeAI;
@@ -113,41 +113,45 @@ export class ProfileIntelligenceService {
    */
   private getSystemPrompt(): SystemMessage {
     return new SystemMessage({
-      content: `You are a professional profile intelligence analyst. Your task is to research and analyze professionals for business networking purposes.
+      content: `You are an expert business intelligence analyst specializing in professional networking and industry research. Your mission is to create comprehensive, actionable intelligence reports for high-value business networking.
 
-IMPORTANT: You MUST use the tavily_search_results_json tool to gather information. Do not provide analysis without searching first.
+MANDATORY: You MUST use the tavily_search_results_json tool extensively to gather current, accurate information. Never provide analysis without thorough research.
 
-Available tools:
-- tavily_search_results_json: Use this to search for comprehensive professional information about people and companies
+RESEARCH PROTOCOL:
+1. Professional Background Search: "{person_name} {title} {company} LinkedIn career"
+2. Company Intelligence: "{company_name} business model revenue industry position"
+3. Industry Context: "{industry} trends leaders market dynamics"
+4. Achievement & Recognition: "{person_name} awards achievements publications speaking"
+5. Network Analysis: "{person_name} connections partnerships collaborations"
+6. Recent Activities: "{person_name} 2024 2025 projects news updates"
+7. Market Position: "{company_name} competitors market share positioning"
 
-Your workflow:
-1. ALWAYS start by using tavily_search_results_json to find information about the person
-2. Search for their professional background, current role, and company
-3. Look for recent achievements, projects, or news
-4. Search for industry insights and company information
-5. Based on your research, provide analysis
+ANALYSIS FRAMEWORK:
+Your analysis must be data-driven, specific, and networking-focused. Include:
 
-Search strategy:
-- Search for: "{person_name} {title} {company} professional background"
-- Search for: "{company_name} company information business"
-- Search for: "{person_name} achievements projects career"
-- Search for: "{person_name} LinkedIn professional experience"
-- Search for: "{person_name} {location} professional network"
-- Search for: "{website_domain} about team leadership"
-- Search for: "{person_name} {industry} expertise skills"
+**Professional Background**: Education, career progression, key roles, expertise depth
+**Company Intelligence**: Business model, market position, growth trajectory, strategic focus
+**Expertise & Skills**: Technical competencies, domain knowledge, unique capabilities
+**Industry Standing**: Recognition, influence, thought leadership, market visibility
+**Strategic Value**: Investment potential, partnership opportunities, advisory capacity
+**Recent Developments**: Latest projects, career moves, company news, industry involvement
+**Networking Potential**: Connection value, collaboration opportunities, mutual benefit scenarios
 
-After completing your searches, provide your analysis in this exact JSON format:
+QUALITY STANDARDS:
+- Use specific data points, numbers, and recent information from your searches
+- Avoid generic statements - be concrete and actionable
+- Focus on networking ROI and business value proposition
+- Include market context and competitive landscape insights
+- Highlight unique differentiators and strategic advantages
+
+OUTPUT FORMAT:
+Provide your intelligence report in this exact JSON structure:
 {
-  "summary": "A concise 2-3 sentence professional summary highlighting key networking value based on your research",
-  "analysis": "Detailed analysis covering: Professional Background, Company Information, Expertise & Skills, Industry Standing, Recent Activities, and Networking Potential - all based on the search results you found"
+  "summary": "A compelling 2-3 sentence executive summary highlighting this person's networking value proposition and key strategic advantages based on your research findings",
+  "analysis": "A comprehensive 400-600 word intelligence report covering all framework elements with specific data points, market insights, and actionable networking recommendations based on your thorough research"
 }
 
-Guidelines:
-- Use tavily_search multiple times to gather comprehensive information
-- Be factual and professional, citing what you found in searches
-- Focus on business networking relevance
-- Aim for 300-500 words in the detailed analysis
-- Always search before analyzing`,
+Remember: Quality over speed. Conduct thorough research before analysis. Be specific, data-driven, and networking-focused.`,
     });
   }
 
@@ -270,26 +274,28 @@ Guidelines:
       }
     }
 
-    // Fallback to text extraction
-    console.log("🔍 Using text extraction fallback...");
+    // Fallback to text extraction with improved patterns
+    console.log("🔍 Using enhanced text extraction fallback...");
 
-    // More flexible regex patterns
+    // Enhanced regex patterns for better extraction
     const summaryPatterns = [
-      /summary["']?\s*:\s*["']([^"']*?)["']/i,
-      /"summary"\s*:\s*"([^"]*?)"/i,
-      /summary:\s*([^}\n]*)/i,
-      /##?\s*summary\s*:?\s*\n?(.*?)(?=\n##|\n\*\*|$)/i,
+      /summary["']?\s*:\s*["']([^"']+?)["']/i,
+      /"summary"\s*:\s*"([^"]+?)"/i,
+      /summary:\s*([^}\n]+)/i,
+      /##?\s*summary\s*:?\s*\n?(.*?)(?=\n##|\n\*\*|\nanalysis|$)/i,
+      /executive\s+summary[:\s]*([^\.]+\.[^\.]+\.[^\.]*\.)/i,
     ];
 
     const analysisPatterns = [
-      /analysis["']?\s*:\s*["']([^"']*?)["']/i,
-      /"analysis"\s*:\s*"([^"]*?)"/i,
-      /analysis:\s*([^}]*)/i,
+      /analysis["']?\s*:\s*["']([^"']+?)["']/i,
+      /"analysis"\s*:\s*"([^"]+?)"/i,
+      /analysis:\s*([^}]+)/i,
       /##?\s*analysis\s*:?\s*\n?(.*?)(?=\n##|\n\*\*|$)/i,
+      /detailed\s+analysis[:\s]*(.{200,})/i,
     ];
 
-    let summary = "Professional summary not available";
-    let analysis = "Detailed analysis not available";
+    let summary = "Professional networking summary pending enhanced research";
+    let analysis = "Comprehensive business intelligence analysis requires additional data gathering for accurate strategic assessment";
 
     // Try summary patterns
     for (const pattern of summaryPatterns) {
@@ -313,7 +319,7 @@ Guidelines:
 
     // If still no good analysis, try to extract the main content
     if (
-      analysis === "Detailed analysis not available" &&
+      analysis === "Comprehensive business intelligence analysis requires additional data gathering for accurate strategic assessment" &&
       content.length > 200
     ) {
       // Remove any JSON attempts and use the plain text
@@ -327,11 +333,11 @@ Guidelines:
     console.log("📊 Text extraction results:");
     console.log(
       "- Summary found:",
-      summary !== "Professional summary not available"
+      summary !== "Professional networking summary pending enhanced research"
     );
     console.log(
       "- Analysis found:",
-      analysis !== "Detailed analysis not available"
+      analysis !== "Comprehensive business intelligence analysis requires additional data gathering for accurate strategic assessment"
     );
 
     return { summary, analysis };
@@ -433,9 +439,9 @@ Professional Interests: ${Object.entries(userProfile.preferences)
 
       // Create user message for analysis
       const userMessage = new HumanMessage({
-        content: `IMPORTANT: You must use the tavily_search_results_json tool to research this person before providing analysis.
+        content: `MANDATORY RESEARCH PROTOCOL: You must conduct comprehensive research using tavily_search_results_json tool before analysis.
 
-Analyze this professional profile for business networking purposes:
+TARGET PROFILE FOR INTELLIGENCE ANALYSIS:
 
 Name: ${validatedProfile.name}
 Title: ${validatedProfile.title || "Not specified"}
@@ -450,25 +456,24 @@ Professional Interests: ${
             .join(", ") || "Not specified"
         }
 
-Step 1: Search for "${validatedProfile.name} ${validatedProfile.title} ${
-          validatedProfile.company
-        }" using the tavily_search_results_json tool
-Step 2: Search for "${
-          validatedProfile.company
-        } company information" using the tavily_search_results_json tool
-Step 3: Search for "${validatedProfile.name} ${
-          validatedProfile.location || "professional"
-        } career achievements" using the tavily_search_results_json tool
-Step 4: Search for "${
-          validatedProfile.website
-            ? validatedProfile.website
-                .replace(/https?:\/\//, "")
-                .split("/")[0] + " about team"
-            : validatedProfile.name + " professional profile"
-        }" using the tavily_search_results_json tool
-Step 5: Based on your comprehensive research, provide your analysis in the specified JSON format.
+REQUIRED SEARCH SEQUENCE:
+1. Professional Background: "${validatedProfile.name} ${validatedProfile.title} ${validatedProfile.company} LinkedIn career experience"
+2. Company Intelligence: "${validatedProfile.company} business model revenue market position competitors"
+3. Industry Analysis: "${validatedProfile.title} ${validatedProfile.company} industry trends 2024 2025"
+4. Achievement Research: "${validatedProfile.name} awards achievements publications projects speaking"
+5. Market Position: "${validatedProfile.company} financial performance growth strategy"
+6. Recent Developments: "${validatedProfile.name} ${validatedProfile.company} news updates 2024 2025"
+7. Network Analysis: "${validatedProfile.name} partnerships collaborations connections"
 
-You MUST use the tavily_search_results_json tool multiple times before providing any analysis.`,
+INTELLIGENCE OBJECTIVES:
+- Quantify business value and networking ROI potential
+- Identify strategic advantages and unique differentiators
+- Assess market influence and industry standing
+- Uncover collaboration and partnership opportunities
+- Evaluate investment or advisory potential
+- Provide actionable networking recommendations
+
+Execute all searches systematically, then deliver comprehensive intelligence report in specified JSON format.`,
       });
 
       // Create and run the agent
@@ -493,37 +498,52 @@ You MUST use the tavily_search_results_json tool multiple times before providing
           "⚠️ No tool calls detected in agent workflow - performing manual search"
         );
 
-        // Manual fallback search
-        const searchQuery = `"${validatedProfile.name}" "${validatedProfile.company}" "${validatedProfile.title}"`;
-        console.log("🔍 Manual search query:", searchQuery);
+        // Manual fallback search with multiple queries
+        const searchQueries = [
+          `"${validatedProfile.name}" "${validatedProfile.company}" "${validatedProfile.title}" professional background`,
+          `"${validatedProfile.company}" business model revenue market position`,
+          `"${validatedProfile.name}" achievements projects career LinkedIn`,
+        ];
 
-        try {
-          const searchResults = await this.searchTool.invoke(searchQuery);
+        let allSearchResults = "";
 
-          // TavilySearchResults returns a formatted string ready for LLM consumption
-          console.log(
-            "🔍 Manual search completed, result length:",
-            searchResults.length
-          );
+        for (const query of searchQueries) {
+          try {
+            console.log("🔍 Manual search query:", query);
+            const results = await this.searchTool.invoke(query);
+            allSearchResults += `\n\n--- Search Results for: ${query} ---\n${results}`;
+            console.log("🔍 Manual search completed, result length:", results.length);
+          } catch (searchError) {
+            console.log("⚠️ Search query failed:", query, searchError);
+          }
+        }
 
-          // Add search results to the conversation and get analysis
-          const searchMessage = new HumanMessage({
-            content: `Here are the search results for ${validatedProfile.name}:
+        if (allSearchResults) {
+          try {
+            // Add search results to the conversation and get analysis
+            const searchMessage = new HumanMessage({
+              content: `COMPREHENSIVE RESEARCH RESULTS for ${validatedProfile.name}:
 
-${searchResults}
+${allSearchResults}
 
-Based on this information, please provide your analysis in the specified JSON format.`,
-          });
+Based on this comprehensive research data, provide your detailed intelligence analysis in the specified JSON format. Focus on:
+- Specific business metrics and achievements found
+- Market position and competitive advantages
+- Strategic networking value and ROI potential
+- Actionable collaboration opportunities
+- Industry influence and thought leadership indicators`,
+            });
 
-          const finalResult = await this.llmWithTools.invoke([
-            this.getSystemPrompt(),
-            userMessage,
-            searchMessage,
-          ]);
+            const finalResult = await this.llmWithTools.invoke([
+              this.getSystemPrompt(),
+              userMessage,
+              searchMessage,
+            ]);
 
-          result.messages.push(finalResult);
-        } catch (searchError) {
-          console.log("⚠️ Manual search failed:", searchError);
+            result.messages.push(finalResult);
+          } catch (analysisError) {
+            console.log("⚠️ Manual analysis failed:", analysisError);
+          }
         }
       }
 

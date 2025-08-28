@@ -225,7 +225,7 @@ export default function CSVImport() {
               </div>
               <Progress value={undefined} className="w-full" />
               <p className="text-xs text-muted-foreground text-center">
-                This may take several minutes depending on the number of users
+                This may take several minutes. Each user requires AI profile generation and vector store creation for intelligent matching.
               </p>
             </div>
           </CardContent>
@@ -271,8 +271,16 @@ export default function CSVImport() {
             {result.success && (
               <Alert>
                 <AlertDescription>
-                  ✅ All users imported successfully! Profile intelligence
-                  analysis has been processed for each user.
+                  ✅ All users imported successfully! Each user has been created with complete profile data and vector store intelligence for smart matching.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Partial Success Message */}
+            {!result.success && result.summary.created > 0 && (
+              <Alert>
+                <AlertDescription>
+                  ⚠️ Partial import completed. {result.summary.created} users were successfully created with vector store intelligence. {result.summary.errors} rows failed and were skipped.
                 </AlertDescription>
               </Alert>
             )}
@@ -282,16 +290,22 @@ export default function CSVImport() {
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <h4 className="font-medium text-red-600">
-                    Errors ({result.errors.length})
+                    Failed Rows ({result.errors.length})
                   </h4>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setShowErrors(!showErrors)}
                   >
-                    {showErrors ? "Hide" : "Show"} Errors
+                    {showErrors ? "Hide" : "Show"} Failed Rows
                   </Button>
                 </div>
+
+                <Alert variant="destructive" className="mb-2">
+                  <AlertDescription>
+                    ⚠️ The following rows could not be processed. Users with vector store failures were automatically deleted to maintain data consistency.
+                  </AlertDescription>
+                </Alert>
 
                 {showErrors && (
                   <div className="space-y-2 max-h-60 overflow-y-auto">

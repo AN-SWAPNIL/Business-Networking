@@ -29,9 +29,21 @@ const CSVRowSchema = z.object({
     .default(""),
 });
 
-// AI Generated Profile Schema
-const AIProfileSchema = z.object({
+// Basic CSV row type for any structure
+export type CSVRow = Record<string, string>;
+
+// AI Generated Complete Profile Schema
+const AICompleteProfileSchema = z.object({
+  // Basic profile info
+  name: z.string(),
+  title: z.string(),
+  company: z.string(),
+  location: z.string(),
   bio: z.string(),
+  phone: z.string().nullable(),
+  website: z.string().nullable(),
+
+  // Networking preferences
   preferences: z.object({
     mentor: z.boolean(),
     invest: z.boolean(),
@@ -41,9 +53,7 @@ const AIProfileSchema = z.object({
   }),
 });
 
-export type CSVRow = z.infer<typeof CSVRowSchema>;
-export type AIProfile = z.infer<typeof AIProfileSchema>;
-
+export type AICompleteProfile = z.infer<typeof AICompleteProfileSchema>;
 export class CSVImportService {
   private llm: ChatGoogleGenerativeAI;
   private supabaseAdmin: any;
@@ -75,7 +85,7 @@ export class CSVImportService {
   /**
    * Parse CSV content into structured data
    */
-  parseCsvData(csvContent: string): CSVRow[] {
+  parseCsvData(csvContent: string): { rows: CSVRow[]; headers: string[] } {
     const lines = csvContent.trim().split("\n");
     if (lines.length < 2) {
       throw new Error("CSV must have at least a header row and one data row");
@@ -102,17 +112,19 @@ export class CSVImportService {
           row[header.trim()] = (values[index] || "").trim();
         });
 
-        // Validate required fields before parsing
-        if (!row["Name"] || !row["Email"] || !row["Current Company Name"]) {
-          console.warn(
-            `Skipping row ${i} - missing required fields (Name, Email, or Company)`
-          );
+        // Basic validation for required fields (for fallback only)
+        if (!row["Name"] && !row["name"]) {
+          console.warn(`Skipping row ${i} - missing name field`);
           continue;
         }
 
-        const validatedRow = CSVRowSchema.parse(row);
-        rows.push(validatedRow);
-        console.log(`✅ Parsed row ${i}: ${validatedRow.Name}`);
+        if (!row["Email"] && !row["email"]) {
+          console.warn(`Skipping row ${i} - missing email field`);
+          continue;
+        }
+
+        rows.push(row);
+        console.log(`✅ Parsed row ${i}: ${row["Name"] || row["name"]}`);
       } catch (error) {
         console.warn(
           `❌ Skipping invalid row ${i}:`,
@@ -126,7 +138,7 @@ export class CSVImportService {
         lines.length - 1
       } total rows`
     );
-    return rows;
+    return { rows, headers };
   }
 
   /**
@@ -163,31 +175,43 @@ export class CSVImportService {
   }
 
   /**
-   * Generate AI bio and preferences for a user
+   * Generate complete AI profile for a user from CSV row data
    */
-  async generateAIProfile(csvRow: CSVRow): Promise<AIProfile> {
+  async generateAIProfile(
+    csvRow: CSVRow,
+    csvHeaders: string[]
+  ): Promise<AICompleteProfile> {
     const systemPrompt = new SystemMessage({
-      content: `You are a professional profile generator for a business networking platform. 
-Your task is to create a compelling professional bio and determine networking preferences based on the provided information.
+      content: `You are an AI assistant that creates comprehensive professional profiles for a business networking platform.
 
-INSTRUCTIONS:
-1. Create a professional bio (100-200 words) that highlights:
-   - Professional background and expertise
-   - Current role and company
-   - Industry experience
-   - Key skills and achievements
-   - Professional interests
+Given CSV data, you need to intelligently extract and generate a complete professional profile.
 
-2. Determine networking preferences based on role, industry, and seniority:
-   - mentor: true if senior position (Manager+, Director, VP, etc.) or experienced professional
-   - invest: true if in finance, investment, business development, or senior leadership roles
-   - discuss: always true for knowledge sharing
-   - collaborate: true if in engineering, tech, consulting, or project-based roles
-   - hire: true if in management, HR, or senior positions
+AVAILABLE CSV COLUMNS:
+${csvHeaders.map((header, index) => `${index + 1}. ${header}`).join("\n")}
 
-3. Return ONLY a valid JSON object with this exact structure:
+YOUR TASK:
+1. Extract and clean the basic information (name, title, company, location)
+2. Generate a compelling 150-200 word professional bio
+3. Intelligently determine networking preferences based on role and seniority
+4. Format phone number properly if provided
+5. Generate a professional website URL if appropriate (LinkedIn, company site, etc.)
+
+NETWORKING PREFERENCES LOGIC:
+- mentor: true for senior roles (Manager+, Director, VP, Lead, Head, Senior)
+- invest: true for finance, investment, business development, C-level roles
+- discuss: always true (everyone discusses)
+- collaborate: true for engineering, tech, consulting, project management roles
+- hire: true for management, HR, leadership positions
+
+Return ONLY a valid JSON object with this exact structure:
 {
-  "bio": "Professional bio text here...",
+  "name": "string",
+  "title": "string", 
+  "company": "string",
+  "location": "string",
+  "bio": "string",
+  "phone": "string or null",
+  "website": "string or null",
   "preferences": {
     "mentor": boolean,
     "invest": boolean,
@@ -197,23 +221,21 @@ INSTRUCTIONS:
   }
 }
 
-Make the bio engaging, professional, and tailored to the person's background.`,
+IMPORTANT: Use null (not undefined) for empty values. Example:
+{
+  "phone": null,
+  "website": null
+}`,
     });
 
     const humanPrompt = new HumanMessage({
-      content: `Generate a professional profile for:
+      content: `Generate a complete professional profile from this CSV data:
 
-Name: ${csvRow.Name}
-Department: ${csvRow["BUET Department (e.g., CE, EEE, ME, URP, etc)"]}
-Company: ${csvRow["Current Company Name"]}
-Title: ${csvRow["Current Job Title/Position "]}
-Function: ${csvRow["Department/Function (e.g., Engineering, Sales, SCM, Project Management, etc.)"]}
-Industry: ${csvRow["Industry Type (e.g., Power, FMCG, Tech, Telco, Consultancy, etc.)  "]}
-Location: ${csvRow["Current Job Location (e.g., Dhaka, Rangpur, Chittagong, etc.)"]}
-Open to help: ${csvRow["Are you open to being contacted for help/referrals? (Yes / No)  "]}
-Student ID: ${csvRow["BUET Student ID (e.g., 1706065, 0204023 etc)"]}
+${Object.entries(csvRow)
+  .map(([key, value]) => `${key}: ${value || "N/A"}`)
+  .join("\n")}
 
-Please generate a professional bio and preferences based on this information.`,
+Please create a comprehensive profile with all fields filled intelligently based on this data.`,
     });
 
     try {
@@ -234,87 +256,56 @@ Please generate a professional bio and preferences based on this information.`,
       }
 
       const parsedData = JSON.parse(jsonMatch[0]);
-      return AIProfileSchema.parse(parsedData);
+      return AICompleteProfileSchema.parse(parsedData);
     } catch (error) {
       console.error("Error generating AI profile:", error);
 
-      // Fallback profile
+      // Simple fallback profile with flexible field access
+      const getName = () => csvRow["Name"] || csvRow["name"] || "Unknown User";
+      const getTitle = () =>
+        csvRow["Current Job Title/Position"] ||
+        csvRow["Job Title"] ||
+        csvRow["Position"] ||
+        csvRow["title"] ||
+        "Professional";
+      const getCompany = () =>
+        csvRow["Current Company Name"] ||
+        csvRow["Company"] ||
+        csvRow["company"] ||
+        "Unknown Company";
+      const getLocation = () =>
+        csvRow[
+          "Current Job Location (e.g., Dhaka, Rangpur, Chittagong, etc.)"
+        ] ||
+        csvRow["Location"] ||
+        csvRow["location"] ||
+        "Bangladesh";
+      const getPhone = () =>
+        csvRow["Phone Number"] ||
+        csvRow["Phone"] ||
+        csvRow["phone"] ||
+        null;
       return {
-        bio: `${csvRow.Name} is a ${csvRow["Current Job Title/Position "]} at ${
-          csvRow["Current Company Name"]
-        }, specializing in ${
-          csvRow[
-            "Department/Function (e.g., Engineering, Sales, SCM, Project Management, etc.)"
-          ]
-        } within the ${
-          csvRow[
-            "Industry Type (e.g., Power, FMCG, Tech, Telco, Consultancy, etc.)  "
-          ]
-        } industry. Based in ${
-          csvRow[
-            "Current Job Location (e.g., Dhaka, Rangpur, Chittagong, etc.)"
-          ]
-        }, they bring expertise from their ${
-          csvRow["BUET Department (e.g., CE, EEE, ME, URP, etc)"]
-        } background at BUET. ${
-          csvRow[
-            "Are you open to being contacted for help/referrals? (Yes / No)  "
-          ] === "Yes"
-            ? "They are open to helping others through networking and professional connections."
-            : ""
-        }`,
+        name: getName(),
+        title: getTitle(),
+        company: getCompany(),
+        location: getLocation(),
+        phone: getPhone(),
+        website: null,
+        bio: `${getName()} is a ${getTitle()} at ${getCompany()}. Based in ${getLocation()}, they bring valuable professional experience to their role. They are focused on professional growth and networking within their industry.`,
         preferences: {
           mentor:
-            csvRow["Current Job Title/Position "]
-              .toLowerCase()
-              .includes("manager") ||
-            csvRow["Current Job Title/Position "]
-              .toLowerCase()
-              .includes("director") ||
-            csvRow["Current Job Title/Position "]
-              .toLowerCase()
-              .includes("head") ||
-            csvRow["Current Job Title/Position "]
-              .toLowerCase()
-              .includes("lead"),
-          invest:
-            csvRow[
-              "Department/Function (e.g., Engineering, Sales, SCM, Project Management, etc.)"
-            ]
-              .toLowerCase()
-              .includes("business") ||
-            csvRow[
-              "Industry Type (e.g., Power, FMCG, Tech, Telco, Consultancy, etc.)  "
-            ]
-              .toLowerCase()
-              .includes("financial"),
+            getTitle().toLowerCase().includes("senior") ||
+            getTitle().toLowerCase().includes("manager") ||
+            getTitle().toLowerCase().includes("director") ||
+            getTitle().toLowerCase().includes("lead"),
+          invest: false,
           discuss: true,
-          collaborate:
-            csvRow[
-              "Department/Function (e.g., Engineering, Sales, SCM, Project Management, etc.)"
-            ]
-              .toLowerCase()
-              .includes("engineering") ||
-            csvRow[
-              "Department/Function (e.g., Engineering, Sales, SCM, Project Management, etc.)"
-            ]
-              .toLowerCase()
-              .includes("project") ||
-            csvRow[
-              "Industry Type (e.g., Power, FMCG, Tech, Telco, Consultancy, etc.)  "
-            ]
-              .toLowerCase()
-              .includes("tech"),
+          collaborate: true,
           hire:
-            csvRow["Current Job Title/Position "]
-              .toLowerCase()
-              .includes("manager") ||
-            csvRow["Current Job Title/Position "]
-              .toLowerCase()
-              .includes("director") ||
-            csvRow["Current Job Title/Position "]
-              .toLowerCase()
-              .includes("head"),
+            getTitle().toLowerCase().includes("manager") ||
+            getTitle().toLowerCase().includes("director") ||
+            getTitle().toLowerCase().includes("head"),
         },
       };
     }
@@ -325,40 +316,42 @@ Please generate a professional bio and preferences based on this information.`,
    */
   async createUserProfile(
     csvRow: CSVRow,
-    aiProfile: AIProfile
+    aiProfile: AICompleteProfile
   ): Promise<{
     success: boolean;
     userId?: string;
     error?: string;
   }> {
     try {
-      console.log(`🚀 Creating user profile for: ${csvRow.Name}`);
+      const getName = () => csvRow["Name"] || csvRow["name"] || "Unknown User";
+      const getEmail = () => csvRow["Email"] || csvRow["email"] || "";
+
+      console.log(`🚀 Creating user profile for: ${getName()}`);
 
       // 1. Create anonymous user in auth.users
       const { data: authData, error: authError } =
         await this.supabaseAdmin.auth.admin.createUser({
-          email: csvRow.Email,
+          email: getEmail(),
           email_confirm: true, // Skip email verification for bulk import
           user_metadata: {
-            full_name: csvRow.Name,
-            name: csvRow.Name,
-            title: csvRow["Current Job Title/Position "],
-            company: csvRow["Current Company Name"],
-            location:
-              csvRow[
-                "Current Job Location (e.g., Dhaka, Rangpur, Chittagong, etc.)"
-              ],
-            phone: csvRow["Phone Number"] || "",
-            department: csvRow["BUET Department (e.g., CE, EEE, ME, URP, etc)"],
-            student_id: csvRow["BUET Student ID (e.g., 1706065, 0204023 etc)"],
+            full_name: aiProfile.name,
+            name: aiProfile.name,
+            title: aiProfile.title || null,
+            company: aiProfile.company || null,
+            location: aiProfile.location || null,
+            phone: aiProfile.phone || csvRow["Phone Number"] || null,
+            website: aiProfile.website || null,
+            department: csvRow["BUET Department (e.g., CE, EEE, ME, URP, etc)"] || null,
+            student_id: csvRow["BUET Student ID (e.g., 1706065, 0204023 etc)"] || null,
             industry:
               csvRow[
                 "Industry Type (e.g., Power, FMCG, Tech, Telco, Consultancy, etc.)  "
-              ],
+              ] || null,
             function:
               csvRow[
                 "Department/Function (e.g., Engineering, Sales, SCM, Project Management, etc.)"
-              ],
+              ] || null,
+            bio: aiProfile.bio || null,
           },
         });
 
@@ -379,21 +372,29 @@ Please generate a professional bio and preferences based on this information.`,
       // 3. Update or insert user profile in public.users
       const userProfileData = {
         id: authData.user.id,
-        email: csvRow.Email,
-        name: csvRow.Name,
-        title: csvRow["Current Job Title/Position "],
-        company: csvRow["Current Company Name"],
-        location:
-          csvRow[
-            "Current Job Location (e.g., Dhaka, Rangpur, Chittagong, etc.)"
-          ],
-        bio: aiProfile.bio,
-        phone: csvRow["Phone Number"] || null,
-        website: null,
+        email: getEmail(),
+        name: aiProfile.name,
+        title: aiProfile.title || null,
+        company: aiProfile.company || null,
+        location: aiProfile.location || null,
+        bio: aiProfile.bio || null,
+        phone:
+          aiProfile.phone ||
+          csvRow["Phone Number"] ||
+          csvRow["Phone"] ||
+          csvRow["phone"] ||
+          null,
+        website: aiProfile.website || null,
         avatar_url: null,
-        preferences: aiProfile.preferences,
-        skills: [], // Can be enhanced later
-        interests: [], // Can be enhanced later
+        preferences: aiProfile.preferences || {
+          mentor: false,
+          invest: false,
+          discuss: false,
+          collaborate: false,
+          hire: false,
+        },
+        // skills: [], // Default empty array
+        // interests: [], // Default empty array
         stats: {
           connections: 0,
           collaborations: 0,
@@ -460,17 +461,18 @@ Please generate a professional bio and preferences based on this information.`,
 
   /**
    * Trigger profile intelligence directly (like in callback route)
+   * MANDATORY: Vector store must be created successfully, otherwise user will be deleted
    */
   async triggerProfileIntelligence(
     userId: string,
     csvRow: CSVRow,
-    aiProfile: AIProfile
+    aiProfile: AICompleteProfile
   ): Promise<{
     success: boolean;
     error?: string;
   }> {
     try {
-      console.log(`🧠 Starting profile intelligence for ${csvRow.Name}`);
+      console.log(`🧠 Starting MANDATORY profile intelligence for ${csvRow.Name || csvRow.name}`);
 
       // Get the user profile data
       const { data: userProfile, error: profileError } =
@@ -497,20 +499,20 @@ Please generate a professional bio and preferences based on this information.`,
       // Initialize profile intelligence service
       const intelligenceService = new ProfileIntelligenceService();
 
-      // Process profile intelligence
+      // Process profile intelligence - THIS MUST SUCCEED
       const result = await intelligenceService.processProfileIntelligence(
         userProfile
       );
 
       if (result.success) {
-        console.log(`✅ Profile intelligence completed for ${csvRow.Name}`);
+        console.log(`✅ Profile intelligence completed for ${csvRow.Name || csvRow.name}`);
         return { success: true };
       } else {
         console.error(
-          `❌ Profile intelligence failed for ${csvRow.Name}:`,
+          `❌ Profile intelligence failed for ${csvRow.Name || csvRow.name}:`,
           result.error
         );
-        return { success: false, error: result.error };
+        return { success: false, error: result.error || "Profile intelligence processing failed" };
       }
     } catch (error) {
       console.error("Error in profile intelligence:", error);
@@ -518,6 +520,36 @@ Please generate a professional bio and preferences based on this information.`,
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
       };
+    }
+  }
+
+  /**
+   * Clean up user if any step fails (delete from both auth and users table)
+   */
+  async cleanupUser(userId: string, userName: string): Promise<void> {
+    try {
+      console.log(`🗑️ Cleaning up user ${userName} (${userId}) due to failure...`);
+      
+      // Delete from users table first
+      const { error: usersError } = await this.supabaseAdmin
+        .from("users")
+        .delete()
+        .eq("id", userId);
+
+      if (usersError) {
+        console.error("Error deleting from users table:", usersError);
+      }
+
+      // Delete from auth.users
+      const { error: authError } = await this.supabaseAdmin.auth.admin.deleteUser(userId);
+      
+      if (authError) {
+        console.error("Error deleting from auth:", authError);
+      }
+
+      console.log(`✅ Successfully cleaned up user ${userName}`);
+    } catch (error) {
+      console.error(`❌ Error cleaning up user ${userName}:`, error);
     }
   }
 
@@ -532,7 +564,7 @@ Please generate a professional bio and preferences based on this information.`,
   }> {
     console.log("🚀 Starting CSV import process...");
 
-    const rows = this.parseCsvData(csvContent);
+    const { rows, headers } = this.parseCsvData(csvContent);
     console.log(`📊 Parsed ${rows.length} rows from CSV`);
 
     let processed = 0;
@@ -544,80 +576,111 @@ Please generate a professional bio and preferences based on this information.`,
       processed++;
 
       try {
-        console.log(`\n🔄 Processing row ${i + 1}/${rows.length}: ${row.Name}`);
+        const rowName = row["Name"] || row["name"] || "Unknown User";
+        const rowEmail = row["Email"] || row["email"] || "";
+
+        console.log(`\n🔄 Processing row ${i + 1}/${rows.length}: ${rowName}`);
 
         // Check if user already exists
         const { data: existingUser } = await this.supabaseAdmin
           .from("users")
           .select("id")
-          .eq("email", row.Email)
+          .eq("email", rowEmail)
           .single();
 
         if (existingUser) {
-          console.log(`⚠️ User ${row.Name} already exists, skipping...`);
+          console.log(`⚠️ User ${rowName} already exists, skipping...`);
           continue;
         }
 
-        // Generate AI profile
-        console.log(`🤖 Generating AI profile for ${row.Name}...`);
-        const aiProfile = await this.generateAIProfile(row);
+        // Step 1: Generate AI profile
+        console.log(`🤖 Generating AI profile for ${rowName}...`);
+        const aiProfile = await this.generateAIProfile(row, headers);
 
-        // Create user profile
-        console.log(`👤 Creating user profile for ${row.Name}...`);
+        // Step 2: Create user profile
+        console.log(`👤 Creating user profile for ${rowName}...`);
         const createResult = await this.createUserProfile(row, aiProfile);
 
         if (!createResult.success) {
           errors.push({
             row: i + 1,
-            name: row.Name,
+            name: rowName,
             error: createResult.error || "User creation failed",
           });
+          console.log(`❌ Failed to create user ${rowName}: ${createResult.error}`);
           continue;
         }
 
-        created++;
-        console.log(`✅ Successfully created profile for ${row.Name}`);
+        const userId = createResult.userId!;
+        console.log(`✅ Successfully created profile for ${rowName}`);
 
-        // Trigger profile intelligence directly (like in callback route)
-        if (createResult.userId) {
-          console.log(`🧠 Triggering profile intelligence for ${row.Name}...`);
-          const intelligenceResult = await this.triggerProfileIntelligence(
-            createResult.userId,
-            row,
-            aiProfile
-          );
+        // Step 3: MANDATORY Profile Intelligence with Vector Store
+        console.log(`🧠 Processing MANDATORY profile intelligence for ${rowName}...`);
+        const intelligenceResult = await this.triggerProfileIntelligence(
+          userId,
+          row,
+          aiProfile
+        );
 
-          if (intelligenceResult.success) {
-            console.log(`🎯 Profile intelligence completed for ${row.Name}`);
-          } else {
-            console.warn(
-              `⚠️ Profile intelligence failed for ${row.Name}: ${intelligenceResult.error}`
-            );
-            // Don't count this as an error since the user was created successfully
-          }
+        if (!intelligenceResult.success) {
+          // CRITICAL: Vector store creation failed - DELETE THE USER
+          console.error(`🚨 Vector store creation failed for ${rowName}. Deleting user...`);
+          await this.cleanupUser(userId, rowName);
+          
+          errors.push({
+            row: i + 1,
+            name: rowName,
+            error: `Vector store creation failed: ${intelligenceResult.error}. User was deleted.`,
+          });
+          console.log(`❌ Deleted user ${rowName} due to vector store failure`);
+          continue;
         }
+
+        // SUCCESS: User created and vector store added
+        created++;
+        console.log(`🎯 SUCCESS: User ${rowName} created with vector store intelligence`);
 
         // Add delay between requests to avoid rate limiting
         if (i < rows.length - 1) {
           await new Promise((resolve) => setTimeout(resolve, 2000));
         }
       } catch (error) {
-        console.error(`❌ Error processing ${row.Name}:`, error);
+        const rowName = row["Name"] || row["name"] || "Unknown User";
+        console.error(`❌ Unexpected error processing ${rowName}:`, error);
+        
+        // If we have a userId from partial creation, clean it up
+        try {
+          const rowEmail = row["Email"] || row["email"] || "";
+          const { data: partialUser } = await this.supabaseAdmin
+            .from("users")
+            .select("id")
+            .eq("email", rowEmail)
+            .single();
+          
+          if (partialUser) {
+            await this.cleanupUser(partialUser.id, rowName);
+            console.log(`🗑️ Cleaned up partially created user ${rowName}`);
+          }
+        } catch (cleanupError) {
+          console.error(`Failed to cleanup partial user ${rowName}:`, cleanupError);
+        }
+
         errors.push({
           row: i + 1,
-          name: row.Name,
+          name: rowName,
           error: error instanceof Error ? error.message : "Unknown error",
         });
       }
     }
 
-    console.log(`\n🎉 CSV import completed!`);
+    console.log(`\n🎉 CSV import completed with STRICT vector store enforcement!`);
     console.log(
-      `📊 Processed: ${processed}, Created: ${created}, Errors: ${errors.length}`
+      `📊 Processed: ${processed}, Successfully Created: ${created}, Failed/Deleted: ${errors.length}`
     );
+    console.log(`🔍 All created users have verified vector store embeddings for intelligent matching`);
 
     return {
-      success: errors.length < rows.length,
+      success: errors.length === 0, // Only success if NO errors occurred
       processed,
       created,
       errors,
