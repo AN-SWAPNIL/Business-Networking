@@ -81,7 +81,7 @@ export class ProfileIntelligenceService {
     const baseLLM = new ChatGoogleGenerativeAI({
       model: "gemini-1.5-flash",
       apiKey: process.env.GOOGLE_API_KEY,
-      temperature: 0.7, // Increased for more creative and informative analysis
+      temperature: 0.7,
     });
 
     this.llmWithTools = baseLLM.bindTools(this.tools) as ChatGoogleGenerativeAI;
@@ -113,45 +113,50 @@ export class ProfileIntelligenceService {
    */
   private getSystemPrompt(): SystemMessage {
     return new SystemMessage({
-      content: `You are an expert business intelligence analyst specializing in professional networking and industry research. Your mission is to create comprehensive, actionable intelligence reports for high-value business networking.
+      content: `You are a professional profile intelligence analyst. Your task is to research and analyze professionals for business networking purposes.
 
-MANDATORY: You MUST use the tavily_search_results_json tool extensively to gather current, accurate information. Never provide analysis without thorough research.
+IMPORTANT: You MUST use the tavily_search_results_json tool to gather information. Do not provide analysis without searching first.
 
-RESEARCH PROTOCOL:
-1. Professional Background Search: "{person_name} {title} {company} LinkedIn career"
-2. Company Intelligence: "{company_name} business model revenue industry position"
-3. Industry Context: "{industry} trends leaders market dynamics"
-4. Achievement & Recognition: "{person_name} awards achievements publications speaking"
-5. Network Analysis: "{person_name} connections partnerships collaborations"
-6. Recent Activities: "{person_name} 2024 2025 projects news updates"
-7. Market Position: "{company_name} competitors market share positioning"
+Available tools:
+- tavily_search_results_json: Use this to search for comprehensive professional information about people and companies
 
-ANALYSIS FRAMEWORK:
-Your analysis must be data-driven, specific, and networking-focused. Include:
+Your workflow:
+1. ALWAYS start by using tavily_search_results_json to find information about the person
+2. Search for their professional background, current role, and company
+3. Look for recent achievements, projects, or news
+4. Search for industry insights and company information
+5. Based on your research, provide analysis
 
-**Professional Background**: Education, career progression, key roles, expertise depth
-**Company Intelligence**: Business model, market position, growth trajectory, strategic focus
-**Expertise & Skills**: Technical competencies, domain knowledge, unique capabilities
-**Industry Standing**: Recognition, influence, thought leadership, market visibility
-**Strategic Value**: Investment potential, partnership opportunities, advisory capacity
-**Recent Developments**: Latest projects, career moves, company news, industry involvement
-**Networking Potential**: Connection value, collaboration opportunities, mutual benefit scenarios
+Search strategy:
+- Search for: "{person_name} {title} {company} professional background"
+- Search for: "{company_name} company information business"
+- Search for: "{person_name} achievements projects career"
+- Search for: "{person_name} LinkedIn professional experience"
+- Search for: "{person_name} {location} professional network"
+- Search for: "{website_domain} about team leadership"
+- Search for: "{person_name} {industry} expertise skills"
 
-QUALITY STANDARDS:
-- Use specific data points, numbers, and recent information from your searches
-- Avoid generic statements - be concrete and actionable
-- Focus on networking ROI and business value proposition
-- Include market context and competitive landscape insights
-- Highlight unique differentiators and strategic advantages
+After completing your searches, provide your analysis in this exact JSON format:
 
-OUTPUT FORMAT:
-Provide your intelligence report in this exact JSON structure:
+FOR SUCCESSFUL ANALYSIS (when you found relevant information):
 {
-  "summary": "A compelling 2-3 sentence executive summary highlighting this person's networking value proposition and key strategic advantages based on your research findings",
-  "analysis": "A comprehensive 400-600 word intelligence report covering all framework elements with specific data points, market insights, and actionable networking recommendations based on your thorough research"
+  "success": true,
+  "summary": "A concise 2-3 sentence professional summary highlighting key networking value based on your research",
+  "analysis": "Detailed analysis covering: Professional Background, Company Information, Expertise & Skills, Industry Standing, Recent Activities, and Networking Potential - all based on the search results you found"
 }
 
-Remember: Quality over speed. Conduct thorough research before analysis. Be specific, data-driven, and networking-focused.`,
+FOR FAILED ANALYSIS (when searches failed or insufficient data found):
+{
+  "success": false,
+  "error": "Specific error message explaining why analysis failed (e.g., 'No relevant professional information found in search results', 'Search queries returned no useful data', etc.)"
+}
+
+Guidelines:
+- Use tavily_search multiple times to gather comprehensive information
+- Be factual and professional, citing what you found in searches
+- Focus on business networking relevance
+- Aim for 300-500 words in the detailed analysis
+- Always search before analyzing`,
     });
   }
 
@@ -230,8 +235,10 @@ Remember: Quality over speed. Conduct thorough research before analysis. Be spec
    * Extract structured response from LLM output
    */
   private extractStructuredResponse(content: string): {
+    success: boolean;
     summary: string;
     analysis: string;
+    error?: string;
   } {
     console.log("🔍 Extracting structured response from content...");
 
@@ -241,11 +248,42 @@ Remember: Quality over speed. Conduct thorough research before analysis. Be spec
       if (jsonMatch) {
         console.log("📋 Found JSON structure, attempting to parse...");
         const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.summary && parsed.analysis) {
-          console.log("✅ Successfully parsed JSON response");
-          return parsed;
+
+        // Handle new format with success field
+        if (parsed.success !== undefined) {
+          console.log(
+            "✅ Successfully parsed new JSON format with success field"
+          );
+
+          if (parsed.success === true) {
+            // Success case - should have summary and analysis
+            return {
+              success: true,
+              summary: parsed.summary || "No summary provided",
+              analysis: parsed.analysis || "No analysis provided",
+            };
+          } else {
+            // Failure case - should have error message
+            return {
+              success: false,
+              summary: "Analysis failed",
+              analysis: "Analysis could not be completed",
+              error: parsed.error || "Analysis failed for unknown reason",
+            };
+          }
         }
-        console.log("⚠️ JSON found but missing summary/analysis fields");
+
+        // Handle legacy format
+        if (parsed.summary && parsed.analysis) {
+          console.log("✅ Successfully parsed legacy JSON response");
+          return {
+            success: true,
+            summary: parsed.summary,
+            analysis: parsed.analysis,
+          };
+        }
+
+        console.log("⚠️ JSON found but missing required fields");
       }
     } catch (error) {
       console.log("⚠️ JSON parsing failed:", error);
@@ -255,6 +293,7 @@ Remember: Quality over speed. Conduct thorough research before analysis. Be spec
     const patterns = [
       /```json\s*(\{[\s\S]*?\})\s*```/,
       /```\s*(\{[\s\S]*?\})\s*```/,
+      /(\{[\s\S]*?"success"[\s\S]*?\})/,
       /(\{[\s\S]*?"summary"[\s\S]*?"analysis"[\s\S]*?\})/,
     ];
 
@@ -264,9 +303,33 @@ Remember: Quality over speed. Conduct thorough research before analysis. Be spec
         try {
           console.log("📋 Trying alternative JSON pattern...");
           const parsed = JSON.parse(match[1]);
+
+          // Handle new format
+          if (parsed.success !== undefined) {
+            console.log(
+              "✅ Successfully parsed alternative JSON format with success field"
+            );
+            return {
+              success: parsed.success === true,
+              summary: parsed.summary || "No summary provided",
+              analysis: parsed.analysis || "No analysis provided",
+              error:
+                parsed.error && parsed.error !== "null"
+                  ? parsed.error
+                  : undefined,
+            };
+          }
+
+          // Handle legacy format
           if (parsed.summary && parsed.analysis) {
-            console.log("✅ Successfully parsed alternative JSON format");
-            return parsed;
+            console.log(
+              "✅ Successfully parsed alternative legacy JSON format"
+            );
+            return {
+              success: true,
+              summary: parsed.summary,
+              analysis: parsed.analysis,
+            };
           }
         } catch (error) {
           console.log("⚠️ Alternative JSON parsing failed");
@@ -274,8 +337,8 @@ Remember: Quality over speed. Conduct thorough research before analysis. Be spec
       }
     }
 
-    // Fallback to text extraction with improved patterns
-    console.log("🔍 Using enhanced text extraction fallback...");
+    // Fallback to text extraction
+    console.log("🔍 Using text extraction fallback...");
 
     // Enhanced regex patterns for better extraction
     const summaryPatterns = [
@@ -283,7 +346,6 @@ Remember: Quality over speed. Conduct thorough research before analysis. Be spec
       /"summary"\s*:\s*"([^"]+?)"/i,
       /summary:\s*([^}\n]+)/i,
       /##?\s*summary\s*:?\s*\n?(.*?)(?=\n##|\n\*\*|\nanalysis|$)/i,
-      /executive\s+summary[:\s]*([^\.]+\.[^\.]+\.[^\.]*\.)/i,
     ];
 
     const analysisPatterns = [
@@ -291,11 +353,11 @@ Remember: Quality over speed. Conduct thorough research before analysis. Be spec
       /"analysis"\s*:\s*"([^"]+?)"/i,
       /analysis:\s*([^}]+)/i,
       /##?\s*analysis\s*:?\s*\n?(.*?)(?=\n##|\n\*\*|$)/i,
-      /detailed\s+analysis[:\s]*(.{200,})/i,
     ];
 
-    let summary = "Professional networking summary pending enhanced research";
-    let analysis = "Comprehensive business intelligence analysis requires additional data gathering for accurate strategic assessment";
+    let summary =
+      "Profile intelligence analysis could not be extracted from response";
+    let analysis = "Detailed analysis could not be extracted from response";
 
     // Try summary patterns
     for (const pattern of summaryPatterns) {
@@ -317,30 +379,71 @@ Remember: Quality over speed. Conduct thorough research before analysis. Be spec
       }
     }
 
-    // If still no good analysis, try to extract the main content
-    if (
-      analysis === "Comprehensive business intelligence analysis requires additional data gathering for accurate strategic assessment" &&
-      content.length > 200
-    ) {
-      // Remove any JSON attempts and use the plain text
-      const cleanContent = content.replace(/\{[\s\S]*?\}/g, "").trim();
-      if (cleanContent.length > 100) {
-        analysis = cleanContent;
-        console.log("✅ Using cleaned content as analysis");
-      }
-    }
+    // If still no good content, consider this a failure
+    const isValidResponse =
+      summary !==
+        "Profile intelligence analysis could not be extracted from response" ||
+      analysis !== "Detailed analysis could not be extracted from response";
 
     console.log("📊 Text extraction results:");
-    console.log(
-      "- Summary found:",
-      summary !== "Professional networking summary pending enhanced research"
-    );
-    console.log(
-      "- Analysis found:",
-      analysis !== "Comprehensive business intelligence analysis requires additional data gathering for accurate strategic assessment"
-    );
+    console.log("- Summary found:", summary.length > 50);
+    console.log("- Analysis found:", analysis.length > 100);
 
-    return { summary, analysis };
+    return {
+      success: isValidResponse,
+      summary,
+      analysis,
+      error: !isValidResponse
+        ? "Could not extract meaningful analysis from AI response"
+        : undefined,
+    };
+  }
+
+  /**
+   * Generate semantic tags for better search filtering
+   */
+  private generateSemanticTags(userProfile: any): string[] {
+    const tags = [];
+
+    // Role tags
+    if (userProfile.title) {
+      const roleKeywords = [
+        "engineer",
+        "manager",
+        "director",
+        "ceo",
+        "cto",
+        "developer",
+        "analyst",
+        "consultant",
+        "founder",
+        "lead",
+      ];
+      roleKeywords.forEach((keyword) => {
+        if (userProfile.title.toLowerCase().includes(keyword)) {
+          tags.push(`role:${keyword}`);
+        }
+      });
+    }
+
+    // Company tags
+    if (userProfile.company) {
+      tags.push(`company:${userProfile.company.toLowerCase()}`);
+    }
+
+    // Location tags
+    if (userProfile.location) {
+      tags.push(`location:${userProfile.location.toLowerCase()}`);
+    }
+
+    // Preference tags
+    Object.entries(userProfile.preferences).forEach(([key, value]) => {
+      if (value) {
+        tags.push(`interest:${key}`);
+      }
+    });
+
+    return tags;
   }
 
   /**
@@ -400,10 +503,16 @@ Professional Interests: ${Object.entries(userProfile.preferences)
             name: userProfile.name,
             title: userProfile.title,
             company: userProfile.company,
+            location: userProfile.location,
             website: userProfile.website,
             type: "profile_intelligence",
             created_at: new Date().toISOString(),
             preferences: userProfile.preferences,
+            // Enhanced metadata for better filtering
+            semantic_tags: this.generateSemanticTags(userProfile),
+            title_keywords: userProfile.title?.toLowerCase().split(" ") || [],
+            company_keywords:
+              userProfile.company?.toLowerCase().split(" ") || [],
           },
           embedding: embedding,
         });
@@ -418,6 +527,194 @@ Professional Interests: ${Object.entries(userProfile.preferences)
     } catch (error) {
       console.error("Error storing embedding:", error);
       throw error;
+    }
+  }
+
+  /**
+   * Find similar profiles for networking
+   */
+  async findSimilarProfiles(
+    userProfile: any,
+    limit: number = 10,
+    minSimilarity: number = 0.6
+  ): Promise<
+    Array<{
+      user_id: string;
+      name: string;
+      title: string;
+      company: string;
+      location: string;
+      similarity: number;
+      content: string;
+      metadata: any;
+    }>
+  > {
+    try {
+      // Create search query from user profile
+      const searchQuery = `${userProfile.name} ${userProfile.title} ${
+        userProfile.company
+      } ${userProfile.bio} ${Object.entries(userProfile.preferences)
+        .filter(([_, value]) => value)
+        .map(([key, _]) => key)
+        .join(" ")}`;
+
+      console.log(`🔍 Searching for similar profiles to: ${userProfile.name}`);
+
+      // Perform similarity search
+      const results = await this.vectorStore.similaritySearchWithScore(
+        searchQuery,
+        limit * 2 // Get more results to filter
+      );
+
+      // Filter and format results
+      const filteredResults = results
+        .filter(([doc, score]) => {
+          // Exclude the user's own profile
+          return (
+            doc.metadata.user_id !== userProfile.id && score >= minSimilarity
+          );
+        })
+        .slice(0, limit)
+        .map(([doc, score]) => ({
+          user_id: doc.metadata.user_id,
+          name: doc.metadata.name,
+          title: doc.metadata.title || "Not specified",
+          company: doc.metadata.company || "Not specified",
+          location: doc.metadata.location || "Not specified",
+          similarity: score,
+          content: doc.pageContent.substring(0, 300) + "...",
+          metadata: doc.metadata,
+        }));
+
+      console.log(`✅ Found ${filteredResults.length} similar profiles`);
+      return filteredResults;
+    } catch (error) {
+      console.error("Error finding similar profiles:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Find networking matches based on specific networking intent
+   */
+  async findNetworkingMatches(
+    userProfile: any,
+    searchType:
+      | "mentor"
+      | "collaborate"
+      | "invest"
+      | "hire"
+      | "discuss" = "collaborate",
+    limit: number = 10
+  ): Promise<
+    Array<{
+      user_id: string;
+      name: string;
+      title: string;
+      company: string;
+      location: string;
+      similarity: number;
+      matchType: string;
+      content: string;
+    }>
+  > {
+    try {
+      console.log(`🎯 Finding ${searchType} matches for: ${userProfile.name}`);
+
+      // Create targeted search queries based on networking intent
+      const searchQueries = {
+        mentor: `experienced ${userProfile.title} mentor advisor senior leadership guidance ${userProfile.company}`,
+        collaborate: `${
+          userProfile.title
+        } collaboration partnership project team work ${Object.entries(
+          userProfile.preferences
+        )
+          .filter(([_, v]) => v)
+          .map(([k, _]) => k)
+          .join(" ")}`,
+        invest: `investor funding startup entrepreneur business development investment capital`,
+        hire: `hiring recruiter talent acquisition ${userProfile.title} ${userProfile.location} employment`,
+        discuss: `discussion networking professional ${userProfile.title} industry insights knowledge sharing`,
+      };
+
+      const searchQuery = searchQueries[searchType];
+
+      // Perform similarity search
+      const results = await this.vectorStore.similaritySearchWithScore(
+        searchQuery,
+        limit * 2
+      );
+
+      // Filter and format results
+      const matches = results
+        .filter(([doc, score]) => {
+          // Exclude self and apply quality threshold
+          return doc.metadata.user_id !== userProfile.id && score >= 0.5;
+        })
+        .slice(0, limit)
+        .map(([doc, score]) => ({
+          user_id: doc.metadata.user_id,
+          name: doc.metadata.name,
+          title: doc.metadata.title || "Not specified",
+          company: doc.metadata.company || "Not specified",
+          location: doc.metadata.location || "Not specified",
+          similarity: score,
+          matchType: searchType,
+          content: doc.pageContent.substring(0, 300) + "...",
+        }));
+
+      console.log(`✅ Found ${matches.length} ${searchType} matches`);
+      return matches;
+    } catch (error) {
+      console.error("Error finding networking matches:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Search profiles by company or industry
+   */
+  async searchByCompany(
+    companyName: string,
+    excludeUserId?: string,
+    limit: number = 10
+  ): Promise<Array<any>> {
+    try {
+      console.log(`🏢 Searching profiles from company: ${companyName}`);
+
+      const searchQuery = `${companyName} company work employee professional`;
+
+      const results = await this.vectorStore.similaritySearchWithScore(
+        searchQuery,
+        limit * 2
+      );
+
+      const companyMatches = results
+        .filter(([doc, score]) => {
+          const matchesCompany = doc.metadata.company
+            ?.toLowerCase()
+            .includes(companyName.toLowerCase());
+          const notSelf = excludeUserId
+            ? doc.metadata.user_id !== excludeUserId
+            : true;
+          return matchesCompany && notSelf && score >= 0.4;
+        })
+        .slice(0, limit)
+        .map(([doc, score]) => ({
+          user_id: doc.metadata.user_id,
+          name: doc.metadata.name,
+          title: doc.metadata.title,
+          company: doc.metadata.company,
+          similarity: score,
+        }));
+
+      console.log(
+        `✅ Found ${companyMatches.length} profiles from ${companyName}`
+      );
+      return companyMatches;
+    } catch (error) {
+      console.error("Error searching by company:", error);
+      return [];
     }
   }
 
@@ -439,9 +736,9 @@ Professional Interests: ${Object.entries(userProfile.preferences)
 
       // Create user message for analysis
       const userMessage = new HumanMessage({
-        content: `MANDATORY RESEARCH PROTOCOL: You must conduct comprehensive research using tavily_search_results_json tool before analysis.
+        content: `IMPORTANT: You must use the tavily_search_results_json tool to research this person before providing analysis.
 
-TARGET PROFILE FOR INTELLIGENCE ANALYSIS:
+Analyze this professional profile for business networking purposes:
 
 Name: ${validatedProfile.name}
 Title: ${validatedProfile.title || "Not specified"}
@@ -456,24 +753,25 @@ Professional Interests: ${
             .join(", ") || "Not specified"
         }
 
-REQUIRED SEARCH SEQUENCE:
-1. Professional Background: "${validatedProfile.name} ${validatedProfile.title} ${validatedProfile.company} LinkedIn career experience"
-2. Company Intelligence: "${validatedProfile.company} business model revenue market position competitors"
-3. Industry Analysis: "${validatedProfile.title} ${validatedProfile.company} industry trends 2024 2025"
-4. Achievement Research: "${validatedProfile.name} awards achievements publications projects speaking"
-5. Market Position: "${validatedProfile.company} financial performance growth strategy"
-6. Recent Developments: "${validatedProfile.name} ${validatedProfile.company} news updates 2024 2025"
-7. Network Analysis: "${validatedProfile.name} partnerships collaborations connections"
+Step 1: Search for "${validatedProfile.name} ${validatedProfile.title} ${
+          validatedProfile.company
+        }" using the tavily_search_results_json tool
+Step 2: Search for "${
+          validatedProfile.company
+        } company information" using the tavily_search_results_json tool
+Step 3: Search for "${validatedProfile.name} ${
+          validatedProfile.location || "professional"
+        } career achievements" using the tavily_search_results_json tool
+Step 4: Search for "${
+          validatedProfile.website
+            ? validatedProfile.website
+                .replace(/https?:\/\//, "")
+                .split("/")[0] + " about team"
+            : validatedProfile.name + " professional profile"
+        }" using the tavily_search_results_json tool
+Step 5: Based on your comprehensive research, provide your analysis in the specified JSON format.
 
-INTELLIGENCE OBJECTIVES:
-- Quantify business value and networking ROI potential
-- Identify strategic advantages and unique differentiators
-- Assess market influence and industry standing
-- Uncover collaboration and partnership opportunities
-- Evaluate investment or advisory potential
-- Provide actionable networking recommendations
-
-Execute all searches systematically, then deliver comprehensive intelligence report in specified JSON format.`,
+You MUST use the tavily_search_results_json tool multiple times before providing any analysis.`,
       });
 
       // Create and run the agent
@@ -498,52 +796,37 @@ Execute all searches systematically, then deliver comprehensive intelligence rep
           "⚠️ No tool calls detected in agent workflow - performing manual search"
         );
 
-        // Manual fallback search with multiple queries
-        const searchQueries = [
-          `"${validatedProfile.name}" "${validatedProfile.company}" "${validatedProfile.title}" professional background`,
-          `"${validatedProfile.company}" business model revenue market position`,
-          `"${validatedProfile.name}" achievements projects career LinkedIn`,
-        ];
+        // Manual fallback search
+        const searchQuery = `"${validatedProfile.name}" "${validatedProfile.company}" "${validatedProfile.title}"`;
+        console.log("🔍 Manual search query:", searchQuery);
 
-        let allSearchResults = "";
+        try {
+          const searchResults = await this.searchTool.invoke(searchQuery);
 
-        for (const query of searchQueries) {
-          try {
-            console.log("🔍 Manual search query:", query);
-            const results = await this.searchTool.invoke(query);
-            allSearchResults += `\n\n--- Search Results for: ${query} ---\n${results}`;
-            console.log("🔍 Manual search completed, result length:", results.length);
-          } catch (searchError) {
-            console.log("⚠️ Search query failed:", query, searchError);
-          }
-        }
+          // TavilySearchResults returns a formatted string ready for LLM consumption
+          console.log(
+            "🔍 Manual search completed, result length:",
+            searchResults.length
+          );
 
-        if (allSearchResults) {
-          try {
-            // Add search results to the conversation and get analysis
-            const searchMessage = new HumanMessage({
-              content: `COMPREHENSIVE RESEARCH RESULTS for ${validatedProfile.name}:
+          // Add search results to the conversation and get analysis
+          const searchMessage = new HumanMessage({
+            content: `Here are the search results for ${validatedProfile.name}:
 
-${allSearchResults}
+${searchResults}
 
-Based on this comprehensive research data, provide your detailed intelligence analysis in the specified JSON format. Focus on:
-- Specific business metrics and achievements found
-- Market position and competitive advantages
-- Strategic networking value and ROI potential
-- Actionable collaboration opportunities
-- Industry influence and thought leadership indicators`,
-            });
+Based on this information, please provide your analysis in the specified JSON format.`,
+          });
 
-            const finalResult = await this.llmWithTools.invoke([
-              this.getSystemPrompt(),
-              userMessage,
-              searchMessage,
-            ]);
+          const finalResult = await this.llmWithTools.invoke([
+            this.getSystemPrompt(),
+            userMessage,
+            searchMessage,
+          ]);
 
-            result.messages.push(finalResult);
-          } catch (analysisError) {
-            console.log("⚠️ Manual analysis failed:", analysisError);
-          }
+          result.messages.push(finalResult);
+        } catch (searchError) {
+          console.log("⚠️ Manual search failed:", searchError);
         }
       }
 
@@ -568,18 +851,30 @@ Based on this comprehensive research data, provide your detailed intelligence an
         String(finalMessage.content).toLowerCase().includes("analysis")
       );
 
-      // Extract structured response
-      const { summary, analysis } = this.extractStructuredResponse(
-        finalMessage.content as string
-      );
+      // Extract structured response with new format
+      const { success, summary, analysis, error } =
+        this.extractStructuredResponse(finalMessage.content as string);
 
       console.log("📊 Extracted response:");
+      console.log("- Success:", success);
       console.log("- Summary length:", summary.length);
       console.log("- Analysis length:", analysis.length);
+      console.log("- Error:", error);
       console.log("- Summary preview:", summary.substring(0, 100) + "...");
       console.log("- Analysis preview:", analysis.substring(0, 100) + "...");
 
-      // Store in vector database
+      // Check if analysis was successful
+      if (!success) {
+        console.log("❌ Profile intelligence failed - insufficient data");
+        return {
+          success: false,
+          error:
+            error ||
+            "Profile intelligence analysis failed - insufficient data found",
+        };
+      }
+
+      // Store in vector database only if successful
       await this.storeEmbedding(validatedProfile, analysis, summary);
 
       console.log(

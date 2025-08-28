@@ -19,6 +19,8 @@ interface ImportResult {
     processed: number;
     created: number;
     errors: number;
+    stopped?: boolean;
+    totalRows?: number;
   };
   errors: Array<{
     row: number;
@@ -39,6 +41,7 @@ export default function CSVImport() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [stats, setStats] = useState<ImportStats | null>(null);
   const [showErrors, setShowErrors] = useState(false);
+  const [stopOnError, setStopOnError] = useState(false);
 
   React.useEffect(() => {
     fetchStats();
@@ -83,7 +86,7 @@ export default function CSVImport() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ csvContent }),
+        body: JSON.stringify({ csvContent, stopOnError }),
       });
 
       const data = await response.json();
@@ -202,8 +205,21 @@ export default function CSVImport() {
         </CardContent>
       </Card>
 
-      {/* Import Button */}
-      <div className="mb-6">
+      {/* Import Options and Button */}
+      <div className="mb-6 space-y-3">
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="stop-on-error"
+            checked={stopOnError}
+            onChange={(e) => setStopOnError(e.target.checked)}
+            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+          />
+          <label htmlFor="stop-on-error" className="text-sm text-gray-700">
+            Stop import on first error (recommended for testing)
+          </label>
+        </div>
+
         <Button
           onClick={handleImport}
           disabled={isImporting || !csvContent.trim()}
@@ -225,7 +241,13 @@ export default function CSVImport() {
               </div>
               <Progress value={undefined} className="w-full" />
               <p className="text-xs text-muted-foreground text-center">
-                This may take several minutes. Each user requires AI profile generation and vector store creation for intelligent matching.
+                This may take several minutes. Each user requires AI profile
+                generation and vector store creation for intelligent matching.
+                {stopOnError && (
+                  <span className="block mt-1 font-medium text-orange-600">
+                    Stop-on-error mode: Processing will halt at first failure.
+                  </span>
+                )}
               </p>
             </div>
           </CardContent>
@@ -246,7 +268,7 @@ export default function CSVImport() {
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Summary */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div className="text-center">
                 <p className="text-2xl font-bold text-blue-600">
                   {result.summary.processed}
@@ -265,22 +287,72 @@ export default function CSVImport() {
                 </p>
                 <p className="text-sm text-muted-foreground">Errors</p>
               </div>
+              {result.summary.totalRows && (
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-600">
+                    {result.summary.totalRows}
+                  </p>
+                  <p className="text-sm text-muted-foreground">Total Rows</p>
+                </div>
+              )}
             </div>
 
             {/* Success Message */}
-            {result.success && (
+            {result.success && !result.summary.stopped && (
               <Alert>
                 <AlertDescription>
-                  ✅ All users imported successfully! Each user has been created with complete profile data and vector store intelligence for smart matching.
+                  ✅ All users imported successfully! Each user has been created
+                  with complete profile data and vector store intelligence for
+                  smart matching.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Stopped Early Message */}
+            {result.summary.stopped && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  🛑 Import stopped early due to error (Stop-on-Error mode
+                  enabled).
+                  {result.summary.created > 0 && (
+                    <span>
+                      {" "}
+                      {result.summary.created} users were successfully created
+                      before stopping.
+                    </span>
+                  )}
+                  {result.summary.totalRows && (
+                    <span>
+                      {" "}
+                      Processed {result.summary.processed} of{" "}
+                      {result.summary.totalRows} total rows.
+                    </span>
+                  )}
                 </AlertDescription>
               </Alert>
             )}
 
             {/* Partial Success Message */}
-            {!result.success && result.summary.created > 0 && (
-              <Alert>
+            {!result.success &&
+              result.summary.created > 0 &&
+              !result.summary.stopped && (
+                <Alert>
+                  <AlertDescription>
+                    ⚠️ Partial import completed. {result.summary.created} users
+                    were successfully created with vector store intelligence.{" "}
+                    {result.summary.errors} rows failed and were skipped.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+            {/* Complete Failure Message */}
+            {!result.success && result.summary.created === 0 && (
+              <Alert variant="destructive">
                 <AlertDescription>
-                  ⚠️ Partial import completed. {result.summary.created} users were successfully created with vector store intelligence. {result.summary.errors} rows failed and were skipped.
+                  ❌ Import failed completely. No users were created.
+                  {result.summary.stopped
+                    ? "Processing stopped on first error as requested."
+                    : "Please check the error details below and fix your CSV data."}
                 </AlertDescription>
               </Alert>
             )}
@@ -303,7 +375,10 @@ export default function CSVImport() {
 
                 <Alert variant="destructive" className="mb-2">
                   <AlertDescription>
-                    ⚠️ The following rows could not be processed. Users with vector store failures were automatically deleted to maintain data consistency.
+                    ⚠️ The following rows could not be processed.
+                    {result.summary.stopped
+                      ? "Processing was stopped after the first error occurred."
+                      : "Users with vector store failures were automatically deleted to maintain data consistency."}
                   </AlertDescription>
                 </Alert>
 

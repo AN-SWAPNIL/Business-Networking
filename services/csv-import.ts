@@ -83,22 +83,22 @@ export class CSVImportService {
   }
 
   /**
-   * Parse CSV content into structured data
+   * Parse CSV content into structured data - handles newlines within quoted fields
    */
   parseCsvData(csvContent: string): { rows: CSVRow[]; headers: string[] } {
-    const lines = csvContent.trim().split("\n");
+    const lines = this.parseCSVRows(csvContent);
     if (lines.length < 2) {
       throw new Error("CSV must have at least a header row and one data row");
     }
 
-    const headers = this.parseCSVLine(lines[0]);
+    const headers = lines[0];
     console.log("📋 CSV Headers:", headers);
 
     const rows: CSVRow[] = [];
 
     for (let i = 1; i < lines.length; i++) {
       try {
-        const values = this.parseCSVLine(lines[i]);
+        const values = lines[i];
 
         if (values.length !== headers.length) {
           console.warn(
@@ -112,7 +112,7 @@ export class CSVImportService {
           row[header.trim()] = (values[index] || "").trim();
         });
 
-        // Basic validation for required fields (for fallback only)
+        // Basic validation for required fields
         if (!row["Name"] && !row["name"]) {
           console.warn(`Skipping row ${i} - missing name field`);
           continue;
@@ -142,36 +142,85 @@ export class CSVImportService {
   }
 
   /**
-   * Parse a single CSV line handling commas within quotes
+   * Parse CSV content into rows, properly handling newlines within quoted fields
    */
-  private parseCSVLine(line: string): string[] {
-    const result = [];
-    let current = "";
+  private parseCSVRows(csvContent: string): string[][] {
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentField = "";
     let inQuotes = false;
+    let i = 0;
 
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      const nextChar = line[i + 1];
+    while (i < csvContent.length) {
+      const char = csvContent[i];
+      const nextChar = csvContent[i + 1];
 
       if (char === '"') {
         if (inQuotes && nextChar === '"') {
-          // Escaped quote
-          current += '"';
-          i++; // Skip next quote
+          // Escaped quote - add single quote to field
+          currentField += '"';
+          i += 2; // Skip both quotes
+          continue;
         } else {
           // Toggle quote state
           inQuotes = !inQuotes;
         }
       } else if (char === "," && !inQuotes) {
-        result.push(current.trim());
-        current = "";
+        // End of field
+        currentRow.push(currentField.trim());
+        currentField = "";
+      } else if ((char === "\n" || char === "\r") && !inQuotes) {
+        // End of row (handle both \n and \r\n)
+        currentRow.push(currentField.trim());
+
+        // Skip empty rows
+        if (
+          currentRow.length > 0 &&
+          currentRow.some((field) => field.length > 0)
+        ) {
+          // Clean up the row - remove surrounding quotes from each field
+          const cleanedRow = currentRow.map((field) => {
+            // Remove surrounding quotes but preserve internal quotes
+            if (field.startsWith('"') && field.endsWith('"')) {
+              return field.slice(1, -1);
+            }
+            return field;
+          });
+          rows.push(cleanedRow);
+        }
+
+        currentRow = [];
+        currentField = "";
+
+        // Handle \r\n - skip the \n if we just processed \r
+        if (char === "\r" && nextChar === "\n") {
+          i += 2;
+          continue;
+        }
       } else {
-        current += char;
+        // Regular character - add to current field
+        currentField += char;
+      }
+
+      i++;
+    }
+
+    // Handle last row if CSV doesn't end with newline
+    if (currentField.length > 0 || currentRow.length > 0) {
+      currentRow.push(currentField.trim());
+      if (currentRow.some((field) => field.length > 0)) {
+        const cleanedRow = currentRow.map((field) => {
+          if (field.startsWith('"') && field.endsWith('"')) {
+            return field.slice(1, -1);
+          }
+          return field;
+        });
+        rows.push(cleanedRow);
       }
     }
 
-    result.push(current.trim());
-    return result.map((value) => value.replace(/^"|"$/g, "")); // Remove surrounding quotes
+    console.log(`📊 Parsed ${rows.length} total rows from CSV`);
+    return rows;
   }
 
   /**
@@ -281,10 +330,7 @@ Please create a comprehensive profile with all fields filled intelligently based
         csvRow["location"] ||
         "Bangladesh";
       const getPhone = () =>
-        csvRow["Phone Number"] ||
-        csvRow["Phone"] ||
-        csvRow["phone"] ||
-        null;
+        csvRow["Phone Number"] || csvRow["Phone"] || csvRow["phone"] || null;
       return {
         name: getName(),
         title: getTitle(),
@@ -341,8 +387,10 @@ Please create a comprehensive profile with all fields filled intelligently based
             location: aiProfile.location || null,
             phone: aiProfile.phone || csvRow["Phone Number"] || null,
             website: aiProfile.website || null,
-            department: csvRow["BUET Department (e.g., CE, EEE, ME, URP, etc)"] || null,
-            student_id: csvRow["BUET Student ID (e.g., 1706065, 0204023 etc)"] || null,
+            department:
+              csvRow["BUET Department (e.g., CE, EEE, ME, URP, etc)"] || null,
+            student_id:
+              csvRow["BUET Student ID (e.g., 1706065, 0204023 etc)"] || null,
             industry:
               csvRow[
                 "Industry Type (e.g., Power, FMCG, Tech, Telco, Consultancy, etc.)  "
@@ -472,7 +520,11 @@ Please create a comprehensive profile with all fields filled intelligently based
     error?: string;
   }> {
     try {
-      console.log(`🧠 Starting MANDATORY profile intelligence for ${csvRow.Name || csvRow.name}`);
+      console.log(
+        `🧠 Starting MANDATORY profile intelligence for ${
+          csvRow.Name || csvRow.name
+        }`
+      );
 
       // Get the user profile data
       const { data: userProfile, error: profileError } =
@@ -505,14 +557,19 @@ Please create a comprehensive profile with all fields filled intelligently based
       );
 
       if (result.success) {
-        console.log(`✅ Profile intelligence completed for ${csvRow.Name || csvRow.name}`);
+        console.log(
+          `✅ Profile intelligence completed for ${csvRow.Name || csvRow.name}`
+        );
         return { success: true };
       } else {
         console.error(
           `❌ Profile intelligence failed for ${csvRow.Name || csvRow.name}:`,
           result.error
         );
-        return { success: false, error: result.error || "Profile intelligence processing failed" };
+        return {
+          success: false,
+          error: result.error || "Profile intelligence processing failed",
+        };
       }
     } catch (error) {
       console.error("Error in profile intelligence:", error);
@@ -528,8 +585,10 @@ Please create a comprehensive profile with all fields filled intelligently based
    */
   async cleanupUser(userId: string, userName: string): Promise<void> {
     try {
-      console.log(`🗑️ Cleaning up user ${userName} (${userId}) due to failure...`);
-      
+      console.log(
+        `🗑️ Cleaning up user ${userName} (${userId}) due to failure...`
+      );
+
       // Delete from users table first
       const { error: usersError } = await this.supabaseAdmin
         .from("users")
@@ -541,8 +600,9 @@ Please create a comprehensive profile with all fields filled intelligently based
       }
 
       // Delete from auth.users
-      const { error: authError } = await this.supabaseAdmin.auth.admin.deleteUser(userId);
-      
+      const { error: authError } =
+        await this.supabaseAdmin.auth.admin.deleteUser(userId);
+
       if (authError) {
         console.error("Error deleting from auth:", authError);
       }
@@ -556,11 +616,16 @@ Please create a comprehensive profile with all fields filled intelligently based
   /**
    * Process entire CSV import
    */
-  async processCSVImport(csvContent: string): Promise<{
+  async processCSVImport(
+    csvContent: string,
+    stopOnError: boolean = false
+  ): Promise<{
     success: boolean;
     processed: number;
     created: number;
     errors: Array<{ row: number; name: string; error: string }>;
+    stopped?: boolean;
+    totalRows: number;
   }> {
     console.log("🚀 Starting CSV import process...");
 
@@ -569,6 +634,7 @@ Please create a comprehensive profile with all fields filled intelligently based
 
     let processed = 0;
     let created = 0;
+    let stopped = false;
     const errors: Array<{ row: number; name: string; error: string }> = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -602,12 +668,21 @@ Please create a comprehensive profile with all fields filled intelligently based
         const createResult = await this.createUserProfile(row, aiProfile);
 
         if (!createResult.success) {
+          const errorMsg = createResult.error || "User creation failed";
           errors.push({
             row: i + 1,
             name: rowName,
-            error: createResult.error || "User creation failed",
+            error: errorMsg,
           });
-          console.log(`❌ Failed to create user ${rowName}: ${createResult.error}`);
+          console.log(`❌ Failed to create user ${rowName}: ${errorMsg}`);
+
+          if (stopOnError) {
+            console.log(
+              "🛑 Stopping CSV import due to error (stopOnError=true)"
+            );
+            stopped = true;
+            break;
+          }
           continue;
         }
 
@@ -615,7 +690,9 @@ Please create a comprehensive profile with all fields filled intelligently based
         console.log(`✅ Successfully created profile for ${rowName}`);
 
         // Step 3: MANDATORY Profile Intelligence with Vector Store
-        console.log(`🧠 Processing MANDATORY profile intelligence for ${rowName}...`);
+        console.log(
+          `🧠 Processing MANDATORY profile intelligence for ${rowName}...`
+        );
         const intelligenceResult = await this.triggerProfileIntelligence(
           userId,
           row,
@@ -624,21 +701,34 @@ Please create a comprehensive profile with all fields filled intelligently based
 
         if (!intelligenceResult.success) {
           // CRITICAL: Vector store creation failed - DELETE THE USER
-          console.error(`🚨 Vector store creation failed for ${rowName}. Deleting user...`);
+          console.error(
+            `🚨 Vector store creation failed for ${rowName}. Deleting user...`
+          );
           await this.cleanupUser(userId, rowName);
-          
+
+          const errorMsg = `Vector store creation failed: ${intelligenceResult.error}. User was deleted.`;
           errors.push({
             row: i + 1,
             name: rowName,
-            error: `Vector store creation failed: ${intelligenceResult.error}. User was deleted.`,
+            error: errorMsg,
           });
           console.log(`❌ Deleted user ${rowName} due to vector store failure`);
+
+          if (stopOnError) {
+            console.log(
+              "🛑 Stopping CSV import due to vector store failure (stopOnError=true)"
+            );
+            stopped = true;
+            break;
+          }
           continue;
         }
 
         // SUCCESS: User created and vector store added
         created++;
-        console.log(`🎯 SUCCESS: User ${rowName} created with vector store intelligence`);
+        console.log(
+          `🎯 SUCCESS: User ${rowName} created with vector store intelligence`
+        );
 
         // Add delay between requests to avoid rate limiting
         if (i < rows.length - 1) {
@@ -647,7 +737,7 @@ Please create a comprehensive profile with all fields filled intelligently based
       } catch (error) {
         const rowName = row["Name"] || row["name"] || "Unknown User";
         console.error(`❌ Unexpected error processing ${rowName}:`, error);
-        
+
         // If we have a userId from partial creation, clean it up
         try {
           const rowEmail = row["Email"] || row["email"] || "";
@@ -656,34 +746,53 @@ Please create a comprehensive profile with all fields filled intelligently based
             .select("id")
             .eq("email", rowEmail)
             .single();
-          
+
           if (partialUser) {
             await this.cleanupUser(partialUser.id, rowName);
             console.log(`🗑️ Cleaned up partially created user ${rowName}`);
           }
         } catch (cleanupError) {
-          console.error(`Failed to cleanup partial user ${rowName}:`, cleanupError);
+          console.error(
+            `Failed to cleanup partial user ${rowName}:`,
+            cleanupError
+          );
         }
 
+        const errorMsg =
+          error instanceof Error ? error.message : "Unknown error";
         errors.push({
           row: i + 1,
           name: rowName,
-          error: error instanceof Error ? error.message : "Unknown error",
+          error: errorMsg,
         });
+
+        if (stopOnError) {
+          console.log(
+            "🛑 Stopping CSV import due to unexpected error (stopOnError=true)"
+          );
+          stopped = true;
+          break;
+        }
       }
     }
 
-    console.log(`\n🎉 CSV import completed with STRICT vector store enforcement!`);
+    console.log(
+      `\n🎉 CSV import completed with STRICT vector store enforcement!`
+    );
     console.log(
       `📊 Processed: ${processed}, Successfully Created: ${created}, Failed/Deleted: ${errors.length}`
     );
-    console.log(`🔍 All created users have verified vector store embeddings for intelligent matching`);
+    console.log(
+      `🔍 All created users have verified vector store embeddings for intelligent matching`
+    );
 
     return {
-      success: errors.length === 0, // Only success if NO errors occurred
+      success: errors.length === 0 && !stopped, // Only success if NO errors occurred AND not stopped early
       processed,
       created,
       errors,
+      stopped,
+      totalRows: rows.length,
     };
   }
 }

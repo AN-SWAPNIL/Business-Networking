@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     console.log(`🔐 CSV import requested by user: ${user.id}`);
 
     const body = await request.json();
-    const { csvContent } = body;
+    const { csvContent, stopOnError = false } = body;
 
     if (!csvContent || typeof csvContent !== "string") {
       return NextResponse.json(
@@ -34,12 +34,16 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`📄 Received CSV content (${csvContent.length} characters)`);
+    console.log(`⚙️ Stop on error: ${stopOnError}`);
 
     // Initialize CSV import service
     const importService = new CSVImportService();
 
     // Process the CSV import
-    const result = await importService.processCSVImport(csvContent);
+    const result = await importService.processCSVImport(
+      csvContent,
+      stopOnError
+    );
 
     if (result.success) {
       return NextResponse.json({
@@ -49,6 +53,8 @@ export async function POST(request: NextRequest) {
           processed: result.processed,
           created: result.created,
           errors: result.errors.length,
+          stopped: result.stopped || false,
+          totalRows: result.totalRows,
         },
         errors: result.errors,
       });
@@ -56,11 +62,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "CSV import completed with errors",
+          message: result.stopped
+            ? "CSV import stopped early due to error"
+            : "CSV import completed with errors",
           summary: {
             processed: result.processed,
             created: result.created,
             errors: result.errors.length,
+            stopped: result.stopped || false,
+            totalRows: result.totalRows,
           },
           errors: result.errors,
         },
