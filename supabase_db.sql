@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
   phone TEXT,
   website TEXT,
   avatar_url TEXT,
+  is_admin BOOLEAN DEFAULT false,
   preferences JSONB DEFAULT '{
     "mentor": false,
     "invest": false,

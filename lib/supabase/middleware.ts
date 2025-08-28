@@ -57,6 +57,9 @@ export async function updateSession(request: NextRequest) {
     "/api/profile-intelligence",
   ];
 
+  // Define admin-only paths that require admin role
+  const adminPaths = ["/admin", "/api/csv-import"];
+
   const currentPath = request.nextUrl.pathname;
 
   // Check if current path is public
@@ -69,6 +72,11 @@ export async function updateSession(request: NextRequest) {
     (path) => currentPath === path || currentPath.startsWith(path)
   );
 
+  // Check if current path is admin-only
+  const isAdminPath = adminPaths.some(
+    (path) => currentPath === path || currentPath.startsWith(path)
+  );
+
   // Redirect authenticated users away from login page only
   if (user && currentPath === "/login") {
     const url = request.nextUrl.clone();
@@ -77,7 +85,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Redirect unauthenticated users from protected routes to login
-  if (!user && isProtectedPath) {
+  if (!user && (isProtectedPath || isAdminPath)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     // Preserve the intended destination for after login
@@ -85,8 +93,25 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Allow access to public paths or if user is authenticated
-  if (isPublicPath || user) {
+  // Check admin access for admin-only routes
+  if (user && isAdminPath) {
+    const { data: userProfile } = await supabase
+      .from("users")
+      .select("is_admin")
+      .eq("id", user.id)
+      .single();
+
+    if (!userProfile?.is_admin) {
+      // Redirect non-admin users to home page with error
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      url.searchParams.set("error", "admin_required");
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // Allow access to public paths or if user is authenticated to non-admin routes
+  if (isPublicPath || (user && !isAdminPath)) {
     return supabaseResponse;
   }
 
