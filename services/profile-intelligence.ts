@@ -148,7 +148,7 @@ FOR SUCCESSFUL ANALYSIS (when you found relevant information):
 FOR FAILED ANALYSIS (when searches failed or insufficient data found):
 {
   "success": false,
-  "error": "Specific error message explaining why analysis failed (e.g., 'No relevant professional information found in search results', 'Search queries returned no useful data', etc.)"
+  "error": "Specific error message explaining why analysis failed with details of error (e.g., 'No relevant professional information found in search results', 'Search queries returned no useful data', etc.)"
 }
 
 Guidelines:
