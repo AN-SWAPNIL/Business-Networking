@@ -14,6 +14,8 @@ const signupSchema = z.object({
     bio: z.string().optional(),
     phone: z.string().optional(),
     website: z.string().optional(),
+    skills: z.array(z.string()).optional(),
+    interests: z.array(z.string()).optional(),
     preferences: z
       .object({
         mentor: z.boolean(),

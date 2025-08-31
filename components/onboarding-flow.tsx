@@ -12,11 +12,12 @@ import { Button } from "@/components/ui/button";
 import { Building, ArrowRight, Check } from "lucide-react";
 import { BusinessCardUpload } from "@/components/business-card-upload";
 import { ProfileForm } from "@/components/profile-form";
+import { SkillsInterestsStep } from "@/components/skills-interests-step";
 import { SignupStep } from "@/components/signup-step";
 import { useAuth } from "@/hooks/use-auth";
 import Link from "next/link";
 
-type OnboardingStep = "welcome" | "upload" | "profile" | "signup" | "complete";
+type OnboardingStep = "welcome" | "upload" | "profile" | "skills" | "signup" | "complete";
 
 export function OnboardingFlow() {
   const [currentStep, setCurrentStep] = useState<OnboardingStep>("welcome");
@@ -37,6 +38,8 @@ export function OnboardingFlow() {
       collaborate: false,
       hire: false,
     },
+    skills: [] as string[],
+    interests: [] as string[],
   });
 
   // Check for authentication - if user is authenticated, always go to complete
@@ -68,6 +71,8 @@ export function OnboardingFlow() {
     const extendedData = {
       ...data,
       bio: "",
+      skills: [] as string[],
+      interests: [] as string[],
     };
     const profileData = { ...extendedData, timestamp: Date.now() };
     localStorage.setItem("tempProfile", JSON.stringify(profileData));
@@ -75,11 +80,41 @@ export function OnboardingFlow() {
     setCurrentStep("profile");
   };
 
-  const handleProfileComplete = (profileData: typeof extractedData) => {
+  const handleProfileComplete = (profileData: {
+    name: string;
+    company: string;
+    phone: string;
+    email: string;
+    title: string;
+    bio: string;
+    location: string;
+    website: string;
+    preferences: {
+      mentor: boolean;
+      invest: boolean;
+      discuss: boolean;
+      collaborate: boolean;
+      hire: boolean;
+    };
+  }) => {
+    // Extend profile data with existing skills/interests or empty arrays
+    const extendedData = {
+      ...profileData,
+      skills: extractedData.skills || [],
+      interests: extractedData.interests || [],
+    };
     // Update localStorage with complete profile
-    const completeProfile = { ...profileData, timestamp: Date.now() };
+    const completeProfile = { ...extendedData, timestamp: Date.now() };
     localStorage.setItem("tempProfile", JSON.stringify(completeProfile));
-    setExtractedData(profileData);
+    setExtractedData(extendedData);
+    setCurrentStep("skills");
+  };
+
+  const handleSkillsInterestsComplete = (skillsInterestsData: { skills: string[]; interests: string[] }) => {
+    const updatedData = { ...extractedData, ...skillsInterestsData };
+    const completeProfile = { ...updatedData, timestamp: Date.now() };
+    localStorage.setItem("tempProfile", JSON.stringify(completeProfile));
+    setExtractedData(updatedData);
     setCurrentStep("signup");
   };
 
@@ -97,8 +132,11 @@ export function OnboardingFlow() {
       case "profile":
         setCurrentStep("upload");
         break;
-      case "signup":
+      case "skills":
         setCurrentStep("profile");
+        break;
+      case "signup":
+        setCurrentStep("skills");
         break;
       default:
         break;
@@ -116,6 +154,9 @@ export function OnboardingFlow() {
       case "profile":
         // This will be handled by handleProfileComplete
         break;
+      case "skills":
+        // This will be handled by handleSkillsInterestsComplete
+        break;
       case "signup":
         // This will be handled by handleSignupComplete
         break;
@@ -132,17 +173,31 @@ export function OnboardingFlow() {
         const profileData = JSON.parse(savedProfile);
         // Check if data is not too old (24 hours)
         if (Date.now() - profileData.timestamp < 24 * 60 * 60 * 1000) {
-          setExtractedData(profileData);
-          // If we have complete profile data, skip to signup
-          if (
-            profileData.name &&
-            profileData.email &&
-            profileData.bio !== undefined
-          ) {
-            setCurrentStep("signup");
-          } else if (profileData.name && profileData.email) {
+          // Ensure skills and interests arrays exist
+          const updatedData = {
+            ...profileData,
+            skills: profileData.skills || [],
+            interests: profileData.interests || [],
+          };
+          setExtractedData(updatedData);
+          // If we have skills and interests, skip to signup
+          // if (
+          //   updatedData.name &&
+          //   updatedData.email &&
+          //   updatedData.bio !== undefined &&
+          //   updatedData.skills.length > 0 &&
+          //   updatedData.interests.length > 0
+          // ) {
+          //   setCurrentStep("signup");
+          // } else if (
+          //   updatedData.name &&
+          //   updatedData.email &&
+          //   updatedData.bio !== undefined
+          // ) {
+          //   setCurrentStep("skills");
+          // } else if (updatedData.name && updatedData.email) {
             setCurrentStep("profile");
-          }
+          // }
         } else {
           // Remove old data
           localStorage.removeItem("tempProfile");
@@ -159,7 +214,7 @@ export function OnboardingFlow() {
       {/* Progress indicator */}
       <div className="flex items-center justify-center mb-8">
         <div className="flex items-center space-x-4">
-          {["welcome", "upload", "profile", "signup", "complete"].map(
+          {["welcome", "upload", "profile", "skills", "signup", "complete"].map(
             (step, index) => (
               <div key={step} className="flex items-center">
                 <div
@@ -170,7 +225,8 @@ export function OnboardingFlow() {
                         [
                           "welcome",
                           "upload",
-                          "profile",
+                          "profile", 
+                          "skills",
                           "signup",
                           "complete",
                         ].indexOf(currentStep)
@@ -183,6 +239,7 @@ export function OnboardingFlow() {
                     "welcome",
                     "upload",
                     "profile",
+                    "skills", 
                     "signup",
                     "complete",
                   ].indexOf(currentStep) ? (
@@ -191,7 +248,7 @@ export function OnboardingFlow() {
                     index + 1
                   )}
                 </div>
-                {index < 4 && (
+                {index < 5 && (
                   <div
                     className={`w-12 h-0.5 ${
                       index <
@@ -199,7 +256,8 @@ export function OnboardingFlow() {
                         "welcome",
                         "upload",
                         "profile",
-                        "signup",
+                        "skills",
+                        "signup", 
                         "complete",
                       ].indexOf(currentStep)
                         ? "bg-accent"
@@ -230,7 +288,7 @@ export function OnboardingFlow() {
             </div>
             <div className="space-y-4">
               <h3 className="text-xl font-serif">
-                Get Started in 4 Easy Steps
+                Get Started in 5 Easy Steps
               </h3>
               <div className="grid gap-4 text-left">
                 <div className="flex items-start space-x-3">
@@ -260,6 +318,17 @@ export function OnboardingFlow() {
                     3
                   </div>
                   <div>
+                    <p className="font-medium">Add Skills & Interests</p>
+                    <p className="text-sm text-muted-foreground">
+                      Select your expertise and areas of interest
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-sm font-medium">
+                    4
+                  </div>
+                  <div>
                     <p className="font-medium">Create Your Account</p>
                     <p className="text-sm text-muted-foreground">
                       Choose email verification or Google sign-in
@@ -268,7 +337,7 @@ export function OnboardingFlow() {
                 </div>
                 <div className="flex items-start space-x-3">
                   <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-sm font-medium">
-                    4
+                    5
                   </div>
                   <div>
                     <p className="font-medium">Start Networking</p>
@@ -330,6 +399,8 @@ export function OnboardingFlow() {
                       collaborate: false,
                       hire: false,
                     },
+                    skills: [] as string[],
+                    interests: [] as string[],
                   };
                   setExtractedData(emptyData);
                   setCurrentStep("profile");
@@ -359,6 +430,27 @@ export function OnboardingFlow() {
             </Button>
             <div className="text-sm text-muted-foreground flex items-center">
               Complete your profile to continue
+            </div>
+          </div>
+        </div>
+      )}
+
+      {currentStep === "skills" && (
+        <div className="space-y-4">
+          <SkillsInterestsStep
+            initialData={{
+              skills: extractedData.skills,
+              interests: extractedData.interests,
+            }}
+            onComplete={handleSkillsInterestsComplete}
+          />
+          {/* Navigation */}
+          <div className="flex justify-between pt-4">
+            <Button variant="outline" onClick={goToPreviousStep}>
+              ← Previous
+            </Button>
+            <div className="text-sm text-muted-foreground flex items-center">
+              Select your skills and interests to continue
             </div>
           </div>
         </div>

@@ -166,6 +166,8 @@ export async function GET(request: NextRequest) {
                 bio: decodedProfileData.bio,
                 phone: decodedProfileData.phone,
                 website: decodedProfileData.website,
+                skills: decodedProfileData.skills || [],
+                interests: decodedProfileData.interests || [],
                 preferences: decodedProfileData.preferences || {
                   mentor: false,
                   invest: false,
@@ -201,6 +203,8 @@ export async function GET(request: NextRequest) {
                   phone: decodedProfileData.phone,
                   website: decodedProfileData.website,
                   avatar_url: user.user_metadata?.avatar_url,
+                  skills: decodedProfileData.skills || [],
+                  interests: decodedProfileData.interests || [],
                   preferences: decodedProfileData.preferences || {
                     mentor: false,
                     invest: false,
