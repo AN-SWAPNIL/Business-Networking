@@ -146,7 +146,7 @@ export class ProfileIntelligenceService {
   FOR SUCCESSFUL SEARCHES (regardless of information quality):
   {
     "success": true,
-    "summary": "A concise 2-3 sentence professional summary based on available information from your research, highlighting key skills and professional interests",
+    "summary": "A concise 2-3 sentence professional summary based on available information from your researches",
     "analysis": "Detailed analysis covering: Professional Background, Company Information, Skills & Professional Interests, Industry Standing, Recent Activities, and Networking Potential - based on whatever information you found in the search results."
   }
 
@@ -351,17 +351,17 @@ export class ProfileIntelligenceService {
 
     // Enhanced regex patterns for better extraction
     const summaryPatterns = [
-      /summary["']?\s*:\s*["']([^"']+?)["']/i,
       /"summary"\s*:\s*"([^"]+?)"/i,
-      /summary:\s*([^}\n]+)/i,
-      /##?\s*summary\s*:?\s*\n?(.*?)(?=\n##|\n\*\*|\nanalysis|$)/i,
+      /summary["']?\s*:\s*["']([^"']+?)["']/i,
+      /summary:\s*([^}"\n,]+)/i,
+      /##?\s*summary\s*:?\s*\n?([\s\S]*?)(?=\n##|\n\*\*|\nanalysis|detailed analysis|$)/i,
     ];
 
     const analysisPatterns = [
-      /analysis["']?\s*:\s*["']([^"']+?)["']/i,
       /"analysis"\s*:\s*"([^"]+?)"/i,
+      /analysis["']?\s*:\s*["']([^"']+?)["']/i,
       /analysis:\s*([^}]+)/i,
-      /##?\s*analysis\s*:?\s*\n?(.*?)(?=\n##|\n\*\*|$)/i,
+      /##?\s*(?:detailed\s*)?analysis\s*:?\s*\n?([\s\S]*?)$/i,
     ];
 
     let summary =
@@ -372,7 +372,7 @@ export class ProfileIntelligenceService {
     for (const pattern of summaryPatterns) {
       const match = content.match(pattern);
       if (match && match[1] && match[1].trim().length > 10) {
-        summary = match[1].trim();
+        summary = match[1].trim().replace(/^["']|["']$/g, ""); // Remove quotes
         console.log("✅ Found summary using pattern");
         break;
       }
@@ -382,7 +382,7 @@ export class ProfileIntelligenceService {
     for (const pattern of analysisPatterns) {
       const match = content.match(pattern);
       if (match && match[1] && match[1].trim().length > 50) {
-        analysis = match[1].trim();
+        analysis = match[1].trim().replace(/^["']|["']$/g, ""); // Remove quotes
         console.log("✅ Found analysis using pattern");
         break;
       }
@@ -539,7 +539,7 @@ ${analysis}
             website: userProfile.website,
             skills: userProfile.skills || [],
             interests: userProfile.interests || [],
-            
+
             // Normalized versions for easier searching
             skills_normalized: (userProfile.skills || []).map((skill: string) =>
               skill.toLowerCase()
@@ -548,8 +548,10 @@ ${analysis}
               (interest: string) => interest.toLowerCase()
             ),
             // Simple location parsing for better matching
-            location_city: userProfile.location?.split(',')[0]?.trim().toLowerCase() || "",
-            location_state: userProfile.location?.split(',')[1]?.trim().toLowerCase() || "",
+            location_city:
+              userProfile.location?.split(",")[0]?.trim().toLowerCase() || "",
+            location_state:
+              userProfile.location?.split(",")[1]?.trim().toLowerCase() || "",
             type: "profile_intelligence",
             created_at: new Date().toISOString(),
             preferences: userProfile.preferences,
