@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
       { name: "Business Development", count: 0 },
       { name: "Strategy", count: 0 },
       { name: "Leadership", count: 0 },
-      { name: "Team Management", count: 0 }
+      { name: "Team Management", count: 0 },
     ];
 
     const defaultInterests = [
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
       { name: "Digital Marketing", count: 0 },
       { name: "Brand Building", count: 0 },
       { name: "Customer Success", count: 0 },
-      { name: "Innovation", count: 0 }
+      { name: "Innovation", count: 0 },
     ];
 
     return NextResponse.json({

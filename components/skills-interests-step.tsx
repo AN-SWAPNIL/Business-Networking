@@ -28,13 +28,22 @@ interface SkillInterest {
   count: number;
 }
 
-export function SkillsInterestsStep({ initialData, onComplete }: SkillsInterestsStepProps) {
-  const [selectedSkills, setSelectedSkills] = useState<string[]>(initialData.skills || []);
-  const [selectedInterests, setSelectedInterests] = useState<string[]>(initialData.interests || []);
+export function SkillsInterestsStep({
+  initialData,
+  onComplete,
+}: SkillsInterestsStepProps) {
+  const [selectedSkills, setSelectedSkills] = useState<string[]>(
+    initialData.skills || []
+  );
+  const [selectedInterests, setSelectedInterests] = useState<string[]>(
+    initialData.interests || []
+  );
   const [skillSearch, setSkillSearch] = useState("");
   const [interestSearch, setInterestSearch] = useState("");
   const [availableSkills, setAvailableSkills] = useState<SkillInterest[]>([]);
-  const [availableInterests, setAvailableInterests] = useState<SkillInterest[]>([]);
+  const [availableInterests, setAvailableInterests] = useState<SkillInterest[]>(
+    []
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,14 +67,14 @@ export function SkillsInterestsStep({ initialData, onComplete }: SkillsInterests
           { name: "React", count: 120 },
           { name: "Node.js", count: 100 },
           { name: "Python", count: 180 },
-          { name: "TypeScript", count: 90 }
+          { name: "TypeScript", count: 90 },
         ]);
         setAvailableInterests([
           { name: "AI/ML", count: 200 },
           { name: "Fintech", count: 80 },
           { name: "SaaS", count: 120 },
           { name: "Web Development", count: 160 },
-          { name: "Mobile Development", count: 90 }
+          { name: "Mobile Development", count: 90 },
         ]);
       } finally {
         setLoading(false);
@@ -77,26 +86,34 @@ export function SkillsInterestsStep({ initialData, onComplete }: SkillsInterests
 
   const addSkill = (skill: string) => {
     const trimmedSkill = skill.trim();
-    if (trimmedSkill && !selectedSkills.includes(trimmedSkill) && selectedSkills.length < 10) {
+    if (
+      trimmedSkill &&
+      !selectedSkills.includes(trimmedSkill) &&
+      selectedSkills.length < 10
+    ) {
       setSelectedSkills([...selectedSkills, trimmedSkill]);
       setSkillSearch("");
     }
   };
 
   const removeSkill = (skill: string) => {
-    setSelectedSkills(selectedSkills.filter(s => s !== skill));
+    setSelectedSkills(selectedSkills.filter((s) => s !== skill));
   };
 
   const addInterest = (interest: string) => {
     const trimmedInterest = interest.trim();
-    if (trimmedInterest && !selectedInterests.includes(trimmedInterest) && selectedInterests.length < 10) {
+    if (
+      trimmedInterest &&
+      !selectedInterests.includes(trimmedInterest) &&
+      selectedInterests.length < 10
+    ) {
       setSelectedInterests([...selectedInterests, trimmedInterest]);
       setInterestSearch("");
     }
   };
 
   const removeInterest = (interest: string) => {
-    setSelectedInterests(selectedInterests.filter(i => i !== interest));
+    setSelectedInterests(selectedInterests.filter((i) => i !== interest));
   };
 
   const handleSubmit = () => {
@@ -112,23 +129,25 @@ export function SkillsInterestsStep({ initialData, onComplete }: SkillsInterests
     onComplete({ skills: selectedSkills, interests: selectedInterests });
   };
 
-  const filteredSkills = availableSkills.filter(skill =>
-    skill.name.toLowerCase().includes(skillSearch.toLowerCase()) &&
-    !selectedSkills.includes(skill.name)
+  const filteredSkills = availableSkills.filter(
+    (skill) =>
+      skill.name.toLowerCase().includes(skillSearch.toLowerCase()) &&
+      !selectedSkills.includes(skill.name)
   );
 
-  const filteredInterests = availableInterests.filter(interest =>
-    interest.name.toLowerCase().includes(interestSearch.toLowerCase()) &&
-    !selectedInterests.includes(interest.name)
+  const filteredInterests = availableInterests.filter(
+    (interest) =>
+      interest.name.toLowerCase().includes(interestSearch.toLowerCase()) &&
+      !selectedInterests.includes(interest.name)
   );
 
   const topSkills = availableSkills
-    .filter(skill => !selectedSkills.includes(skill.name))
+    .filter((skill) => !selectedSkills.includes(skill.name))
     .sort((a, b) => b.count - a.count)
     .slice(0, 8);
 
   const topInterests = availableInterests
-    .filter(interest => !selectedInterests.includes(interest.name))
+    .filter((interest) => !selectedInterests.includes(interest.name))
     .sort((a, b) => b.count - a.count)
     .slice(0, 8);
 
@@ -156,8 +175,8 @@ export function SkillsInterestsStep({ initialData, onComplete }: SkillsInterests
           Skills & Interests
         </CardTitle>
         <CardDescription>
-          Select your skills and interests to help us connect you with the right people.
-          Choose 1-10 items for each category.
+          Select your skills and interests to help us connect you with the right
+          people. Choose 1-10 items for each category.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -231,7 +250,10 @@ export function SkillsInterestsStep({ initialData, onComplete }: SkillsInterests
                     className="block w-full text-left px-2 py-1 hover:bg-muted rounded text-sm"
                     disabled={selectedSkills.length >= 10}
                   >
-                    {skill.name} <span className="text-muted-foreground">({skill.count})</span>
+                    {skill.name}{" "}
+                    <span className="text-muted-foreground">
+                      ({skill.count})
+                    </span>
                   </button>
                 ))}
               </div>
@@ -241,7 +263,9 @@ export function SkillsInterestsStep({ initialData, onComplete }: SkillsInterests
           {/* Popular Skills */}
           {!skillSearch && topSkills.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Popular Skills</Label>
+              <Label className="text-sm text-muted-foreground">
+                Popular Skills
+              </Label>
               <div className="flex flex-wrap gap-2">
                 {topSkills.map((skill) => (
                   <Button
@@ -325,7 +349,10 @@ export function SkillsInterestsStep({ initialData, onComplete }: SkillsInterests
                     className="block w-full text-left px-2 py-1 hover:bg-muted rounded text-sm"
                     disabled={selectedInterests.length >= 10}
                   >
-                    {interest.name} <span className="text-muted-foreground">({interest.count})</span>
+                    {interest.name}{" "}
+                    <span className="text-muted-foreground">
+                      ({interest.count})
+                    </span>
                   </button>
                 ))}
               </div>
@@ -335,7 +362,9 @@ export function SkillsInterestsStep({ initialData, onComplete }: SkillsInterests
           {/* Popular Interests */}
           {!interestSearch && topInterests.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Popular Interests</Label>
+              <Label className="text-sm text-muted-foreground">
+                Popular Interests
+              </Label>
               <div className="flex flex-wrap gap-2">
                 {topInterests.map((interest) => (
                   <Button
@@ -359,7 +388,9 @@ export function SkillsInterestsStep({ initialData, onComplete }: SkillsInterests
         <Button
           onClick={handleSubmit}
           className="w-full"
-          disabled={selectedSkills.length === 0 || selectedInterests.length === 0}
+          disabled={
+            selectedSkills.length === 0 || selectedInterests.length === 0
+          }
         >
           Continue to Account Creation
         </Button>

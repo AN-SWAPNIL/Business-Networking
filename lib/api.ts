@@ -113,6 +113,8 @@ export interface UserProfile {
   phone?: string;
   website?: string;
   avatar_url?: string;
+  skills?: string[];
+  interests?: string[];
   preferences: {
     mentor: boolean;
     invest: boolean;
@@ -141,6 +143,8 @@ export interface UpdateProfileData {
   bio?: string;
   phone?: string;
   website?: string;
+  skills?: string[];
+  interests?: string[];
   preferences?: {
     mentor: boolean;
     invest: boolean;

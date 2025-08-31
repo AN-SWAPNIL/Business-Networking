@@ -27,6 +27,8 @@ import {
   Handshake,
   LogOut,
   User as UserIcon,
+  Lightbulb,
+  Code,
 } from "lucide-react";
 import { EditProfileModal } from "@/components/edit-profile-modal";
 import { ProfileSettings } from "@/components/profile-settings";
@@ -338,6 +340,72 @@ export function ProfileDashboard() {
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       No preferences set
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Skills */}
+              <div className="pt-4 border-t">
+                <h4 className="font-medium mb-3 flex items-center">
+                  <Code className="w-4 h-4 mr-2" />
+                  Skills
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {profile.skills && profile.skills.length > 0 ? (
+                    <>
+                      {profile.skills.slice(0, 6).map((skill) => (
+                        <Badge key={skill} variant="default" className="text-xs">
+                          {skill}
+                        </Badge>
+                      ))}
+                      {profile.skills.length > 6 && (
+                        <Badge
+                          variant="default"
+                          className="text-xs opacity-70"
+                        >
+                          +{profile.skills.length - 6} more
+                        </Badge>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No skills added yet
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Interests */}
+              <div className="pt-4 border-t">
+                <h4 className="font-medium mb-3 flex items-center">
+                  <Lightbulb className="w-4 h-4 mr-2" />
+                  Interests
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {profile.interests && profile.interests.length > 0 ? (
+                    <>
+                      {profile.interests.slice(0, 6).map((interest) => (
+                        <Badge
+                          key={interest}
+                          variant="secondary"
+                          className="text-xs"
+                        >
+                          {interest}
+                        </Badge>
+                      ))}
+                      {profile.interests.length > 6 && (
+                        <Badge
+                          variant="secondary"
+                          className="text-xs opacity-70"
+                        >
+                          +{profile.interests.length - 6} more
+                        </Badge>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No interests added yet
                     </p>
                   )}
                 </div>

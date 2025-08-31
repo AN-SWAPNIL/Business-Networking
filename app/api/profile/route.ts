@@ -10,6 +10,8 @@ const updateProfileSchema = z.object({
   bio: z.string().optional(),
   phone: z.string().optional(),
   website: z.string().url().optional().or(z.literal("")),
+  skills: z.array(z.string()).optional(),
+  interests: z.array(z.string()).optional(),
   preferences: z
     .object({
       mentor: z.boolean(),
@@ -66,6 +68,8 @@ export async function GET(request: NextRequest) {
         phone: profile.phone,
         website: profile.website,
         avatar_url: profile.avatar_url,
+        skills: profile.skills || [],
+        interests: profile.interests || [],
         preferences: profile.preferences || {
           mentor: false,
           invest: false,
@@ -127,6 +131,8 @@ export async function PUT(request: NextRequest) {
         bio: validatedData.bio,
         phone: validatedData.phone,
         website: validatedData.website,
+        skills: validatedData.skills,
+        interests: validatedData.interests,
         preferences: validatedData.preferences,
         updated_at: new Date().toISOString(),
       })
@@ -144,44 +150,61 @@ export async function PUT(request: NextRequest) {
 
     // Trigger profile intelligence in the background for important field updates
     const hasImportantUpdates = !!(
-      validatedData.name || 
-      validatedData.title || 
-      validatedData.company || 
-      validatedData.location || 
-      validatedData.bio || 
-      validatedData.website || 
+      validatedData.name ||
+      validatedData.title ||
+      validatedData.company ||
+      validatedData.location ||
+      validatedData.bio ||
+      validatedData.website ||
+      validatedData.skills ||
+      validatedData.interests ||
       validatedData.preferences
     );
-    
-    if (hasImportantUpdates && updatedProfile.name && (updatedProfile.company || updatedProfile.title)) {
+
+    if (
+      hasImportantUpdates &&
+      updatedProfile.name &&
+      (updatedProfile.company || updatedProfile.title)
+    ) {
       try {
         // Make async call to profile intelligence API
-        const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        const origin =
+          request.headers.get("origin") ||
+          process.env.NEXT_PUBLIC_APP_URL ||
+          "http://localhost:3000";
         const intelligenceUrl = `${origin}/api/profile-intelligence`;
-        
+
         // Fire and forget - don't wait for completion
         fetch(intelligenceUrl, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Authorization': request.headers.get('Authorization') || '',
-            'Cookie': request.headers.get('Cookie') || '',
-            'Content-Type': 'application/json',
+            Authorization: request.headers.get("Authorization") || "",
+            Cookie: request.headers.get("Cookie") || "",
+            "Content-Type": "application/json",
           },
-        }).catch(error => {
-          console.log("Profile intelligence trigger failed (background process):", error.message);
+        }).catch((error) => {
+          console.log(
+            "Profile intelligence trigger failed (background process):",
+            error.message
+          );
         });
-        
+
         const updatedFields = [
-          validatedData.name && 'name',
-          validatedData.title && 'title',
-          validatedData.company && 'company',
-          validatedData.location && 'location',
-          validatedData.bio && 'bio',
-          validatedData.website && 'website',
-          validatedData.preferences && 'preferences'
+          validatedData.name && "name",
+          validatedData.title && "title",
+          validatedData.company && "company",
+          validatedData.location && "location",
+          validatedData.bio && "bio",
+          validatedData.website && "website",
+          validatedData.skills && "skills",
+          validatedData.interests && "interests",
+          validatedData.preferences && "preferences",
         ].filter(Boolean);
-        
-        console.log("🧠 Profile intelligence triggered in background for field updates:", updatedFields);
+
+        console.log(
+          "🧠 Profile intelligence triggered in background for field updates:",
+          updatedFields
+        );
       } catch (error) {
         console.log("Failed to trigger profile intelligence:", error);
         // Don't fail the main request
@@ -202,6 +225,8 @@ export async function PUT(request: NextRequest) {
         phone: updatedProfile.phone,
         website: updatedProfile.website,
         avatar_url: updatedProfile.avatar_url,
+        skills: updatedProfile.skills || [],
+        interests: updatedProfile.interests || [],
         preferences: updatedProfile.preferences || {
           mentor: false,
           invest: false,

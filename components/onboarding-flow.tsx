@@ -17,7 +17,13 @@ import { SignupStep } from "@/components/signup-step";
 import { useAuth } from "@/hooks/use-auth";
 import Link from "next/link";
 
-type OnboardingStep = "welcome" | "upload" | "profile" | "skills" | "signup" | "complete";
+type OnboardingStep =
+  | "welcome"
+  | "upload"
+  | "profile"
+  | "skills"
+  | "signup"
+  | "complete";
 
 export function OnboardingFlow() {
   const [currentStep, setCurrentStep] = useState<OnboardingStep>("welcome");
@@ -65,7 +71,7 @@ export function OnboardingFlow() {
       discuss: boolean;
       collaborate: boolean;
       hire: boolean;
-    },
+    };
   }) => {
     // Extend data with default values and save to localStorage
     const extendedData = {
@@ -110,7 +116,10 @@ export function OnboardingFlow() {
     setCurrentStep("skills");
   };
 
-  const handleSkillsInterestsComplete = (skillsInterestsData: { skills: string[]; interests: string[] }) => {
+  const handleSkillsInterestsComplete = (skillsInterestsData: {
+    skills: string[];
+    interests: string[];
+  }) => {
     const updatedData = { ...extractedData, ...skillsInterestsData };
     const completeProfile = { ...updatedData, timestamp: Date.now() };
     localStorage.setItem("tempProfile", JSON.stringify(completeProfile));
@@ -196,7 +205,7 @@ export function OnboardingFlow() {
           // ) {
           //   setCurrentStep("skills");
           // } else if (updatedData.name && updatedData.email) {
-            setCurrentStep("profile");
+          setCurrentStep("profile");
           // }
         } else {
           // Remove old data
@@ -225,7 +234,7 @@ export function OnboardingFlow() {
                         [
                           "welcome",
                           "upload",
-                          "profile", 
+                          "profile",
                           "skills",
                           "signup",
                           "complete",
@@ -239,7 +248,7 @@ export function OnboardingFlow() {
                     "welcome",
                     "upload",
                     "profile",
-                    "skills", 
+                    "skills",
                     "signup",
                     "complete",
                   ].indexOf(currentStep) ? (
@@ -257,7 +266,7 @@ export function OnboardingFlow() {
                         "upload",
                         "profile",
                         "skills",
-                        "signup", 
+                        "signup",
                         "complete",
                       ].indexOf(currentStep)
                         ? "bg-accent"
