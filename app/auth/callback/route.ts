@@ -249,6 +249,8 @@ export async function GET(request: NextRequest) {
                         location: updatedUser.location,
                         bio: updatedUser.bio,
                         website: updatedUser.website,
+                        skills: updatedUser.skills || [],
+                        interests: updatedUser.interests || [],
                         preferences: updatedUser.preferences,
                       });
 

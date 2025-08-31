@@ -43,6 +43,10 @@ const AICompleteProfileSchema = z.object({
   phone: z.string().nullable(),
   website: z.string().nullable(),
 
+  // Skills and interests
+  skills: z.array(z.string()).min(1).max(10),
+  interests: z.array(z.string()).min(1).max(10),
+
   // Networking preferences
   preferences: z.object({
     mentor: z.boolean(),
@@ -241,9 +245,30 @@ ${csvHeaders.map((header, index) => `${index + 1}. ${header}`).join("\n")}
 YOUR TASK:
 1. Extract and clean the basic information (name, title, company, location)
 2. Generate a compelling 150-200 word professional bio
-3. Intelligently determine networking preferences based on role and seniority
-4. Format phone number properly if provided
-5. Generate a professional website URL if appropriate (LinkedIn, company site, etc.)
+3. Generate 3-5 relevant professional skills based on job title and industry
+4. Generate 3-5 professional interests based on role and industry context
+5. Intelligently determine networking preferences based on role and seniority
+6. Format phone number properly if provided
+7. Generate a professional website URL if appropriate (LinkedIn, company site, etc.)
+
+SKILLS GENERATION:
+- Generate 3-5 specific, relevant professional skills based on job title and industry
+- For developers: "React", "Node.js", "TypeScript", "Python", "JavaScript"
+- For product managers: "Product Strategy", "User Research", "Analytics", "Agile"
+- For designers: "UI/UX Design", "Figma", "User Research", "Accessibility"
+- For marketers: "Growth Marketing", "Brand Strategy", "Content Marketing", "Analytics"
+- For executives: "Strategic Leadership", "Team Management", "Business Strategy"
+- Make skills specific to their role and expertise level
+- Avoid generic skills like "Hard Work" - focus on technical/professional competencies
+
+INTERESTS GENERATION:
+- Generate 3-5 professional interests that align with their career path
+- For tech roles: "AI/ML", "Cloud Computing", "Open Source", "SaaS"
+- For business roles: "B2B", "Growth", "Fintech", "Enterprise Software"
+- For design roles: "Design Systems", "Accessibility", "EdTech"
+- For leadership: "Leadership Development", "Industry Trends", "Strategic Planning"
+- Focus on industry trends, professional development, and career-relevant topics
+- Avoid personal hobbies - keep it professional and networking-focused
 
 NETWORKING PREFERENCES LOGIC:
 - mentor: true for senior roles (Manager+, Director, VP, Lead, Head, Senior)
@@ -259,6 +284,8 @@ Return ONLY a valid JSON object with this exact structure:
   "company": "string",
   "location": "string",
   "bio": "string",
+  "skills": ["skill1", "skill2", "skill3"],
+  "interests": ["interest1", "interest2", "interest3"],
   "phone": "string or null",
   "website": "string or null",
   "preferences": {
@@ -270,10 +297,16 @@ Return ONLY a valid JSON object with this exact structure:
   }
 }
 
-IMPORTANT: Use null (not undefined) for empty values. Example:
+IMPORTANT: 
+- Use null (not undefined) for empty values
+- skills and interests must be arrays with 3-5 items each
+- Make skills and interests specific and professional
+Example:
 {
   "phone": null,
-  "website": null
+  "website": null,
+  "skills": ["React", "TypeScript", "Node.js", "AWS"],
+  "interests": ["AI/ML", "Cloud Computing", "SaaS"]
 }`,
     });
 
@@ -339,6 +372,8 @@ Please create a comprehensive profile with all fields filled intelligently based
         phone: getPhone(),
         website: null,
         bio: `${getName()} is a ${getTitle()} at ${getCompany()}. Based in ${getLocation()}, they bring valuable professional experience to their role. They are focused on professional growth and networking within their industry.`,
+        skills: this.generateDefaultSkills(getTitle(), getCompany()),
+        interests: this.generateDefaultInterests(getTitle()),
         preferences: {
           mentor:
             getTitle().toLowerCase().includes("senior") ||
@@ -387,6 +422,8 @@ Please create a comprehensive profile with all fields filled intelligently based
             location: aiProfile.location || null,
             phone: aiProfile.phone || csvRow["Phone Number"] || null,
             website: aiProfile.website || null,
+            skills: aiProfile.skills || [],
+            interests: aiProfile.interests || [],
             department:
               csvRow["BUET Department (e.g., CE, EEE, ME, URP, etc)"] || null,
             student_id:
@@ -441,8 +478,8 @@ Please create a comprehensive profile with all fields filled intelligently based
           collaborate: false,
           hire: false,
         },
-        // skills: [], // Default empty array
-        // interests: [], // Default empty array
+        skills: aiProfile.skills || [],
+        interests: aiProfile.interests || [],
         stats: {
           connections: 0,
           collaborations: 0,
@@ -794,5 +831,171 @@ Please create a comprehensive profile with all fields filled intelligently based
       stopped,
       totalRows: rows.length,
     };
+  }
+
+  // Generate default skills based on job title and company
+  private generateDefaultSkills(title: string, company: string): string[] {
+    const skillsMap: Record<string, string[]> = {
+      engineer: ["React", "Node.js", "TypeScript", "AWS"],
+      developer: ["JavaScript", "React", "Python", "SQL"],
+      "software engineer": ["React", "Node.js", "TypeScript", "AWS"],
+      "full stack": ["JavaScript", "React", "Python", "SQL"],
+      frontend: ["React", "TypeScript", "CSS", "JavaScript"],
+      backend: ["Node.js", "Python", "SQL", "AWS"],
+      designer: ["UI/UX Design", "Figma", "User Research", "Accessibility"],
+      "ux designer": [
+        "UI/UX Design",
+        "Figma",
+        "User Research",
+        "Accessibility",
+      ],
+      "product manager": [
+        "Product Strategy",
+        "User Research",
+        "Analytics",
+        "Agile",
+      ],
+      manager: [
+        "Leadership",
+        "Project Management",
+        "Strategic Planning",
+        "Team Building",
+      ],
+      director: [
+        "Strategic Leadership",
+        "Team Management",
+        "Business Strategy",
+        "Executive Leadership",
+      ],
+      marketing: [
+        "Growth Marketing",
+        "Brand Strategy",
+        "Content Marketing",
+        "Analytics",
+      ],
+      "marketing director": [
+        "Growth Marketing",
+        "Brand Strategy",
+        "Content Marketing",
+        "Analytics",
+      ],
+      analyst: ["Data Analysis", "Research", "Analytics", "SQL"],
+      consultant: [
+        "Business Analysis",
+        "Strategy",
+        "Client Relations",
+        "Consulting",
+      ],
+      sales: ["Sales Strategy", "Client Development", "Negotiation", "CRM"],
+      "venture capital": [
+        "Investment Analysis",
+        "Due Diligence",
+        "Strategy",
+        "Networking",
+      ],
+      investor: [
+        "Investment Analysis",
+        "Due Diligence",
+        "Strategy",
+        "Networking",
+      ],
+      cto: [
+        "Engineering Leadership",
+        "System Architecture",
+        "Team Building",
+        "Strategy",
+      ],
+      "chief technology": [
+        "Engineering Leadership",
+        "System Architecture",
+        "Team Building",
+        "Strategy",
+      ],
+      finance: [
+        "Financial Analysis",
+        "Risk Management",
+        "Investment Strategy",
+        "Excel",
+      ],
+      hr: [
+        "Human Resources",
+        "Talent Management",
+        "Recruitment",
+        "Employee Relations",
+      ],
+      operations: [
+        "Operations Management",
+        "Process Optimization",
+        "Logistics",
+        "Supply Chain",
+      ],
+    };
+
+    const titleLower = title.toLowerCase();
+
+    for (const [key, skills] of Object.entries(skillsMap)) {
+      if (titleLower.includes(key)) {
+        return skills;
+      }
+    }
+
+    // Default skills for any professional
+    return ["Leadership", "Communication", "Strategic Planning"];
+  }
+
+  // Generate default interests based on job title
+  private generateDefaultInterests(title: string): string[] {
+    const interestsMap: Record<string, string[]> = {
+      engineer: ["AI/ML", "Cloud Computing", "Open Source"],
+      developer: ["Web Development", "AI/ML", "Open Source"],
+      "software engineer": [
+        "AI/ML",
+        "Cloud Computing",
+        "Software Architecture",
+      ],
+      "full stack": ["Web Development", "AI/ML", "Open Source"],
+      frontend: ["Web Development", "UI/UX", "JavaScript Frameworks"],
+      backend: ["Cloud Computing", "System Design", "APIs"],
+      designer: ["Design Systems", "Accessibility", "EdTech"],
+      "ux designer": ["Design Systems", "Accessibility", "User Experience"],
+      "product manager": ["SaaS", "B2B", "Growth"],
+      manager: ["Leadership Development", "Team Building", "Business Growth"],
+      director: [
+        "Strategic Planning",
+        "Industry Trends",
+        "Executive Leadership",
+      ],
+      marketing: ["B2B Marketing", "SaaS", "Growth"],
+      "marketing director": ["B2B Marketing", "SaaS", "Growth"],
+      analyst: ["Data Science", "Analytics", "Business Intelligence"],
+      consultant: [
+        "Business Strategy",
+        "Industry Analysis",
+        "Digital Transformation",
+      ],
+      sales: ["B2B Sales", "Customer Success", "Sales Technology"],
+      "venture capital": ["Fintech", "SaaS", "AI/ML", "Enterprise Software"],
+      investor: ["Fintech", "SaaS", "AI/ML", "Enterprise Software"],
+      cto: ["Cloud Computing", "AI/ML", "Engineering Culture"],
+      "chief technology": ["Cloud Computing", "AI/ML", "Engineering Culture"],
+      finance: ["Fintech", "Investment Strategy", "Financial Markets"],
+      hr: ["Workplace Culture", "Talent Development", "Employee Engagement"],
+      operations: [
+        "Process Improvement",
+        "Supply Chain",
+        "Operational Excellence",
+      ],
+    };
+
+    const titleLower = title.toLowerCase();
+
+    for (const [key, interests] of Object.entries(interestsMap)) {
+      if (titleLower.includes(key)) {
+        return interests;
+      }
+    }
+
+    // Default interests for any professional
+    return ["Professional Networking", "Industry Trends", "Career Development"];
   }
 }

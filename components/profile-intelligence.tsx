@@ -16,6 +16,8 @@ interface ProfileIntelligenceProps {
     location?: string;
     bio?: string;
     website?: string;
+    skills?: string[];
+    interests?: string[];
     preferences?: {
       mentor: boolean;
       invest: boolean;
@@ -85,6 +87,17 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
         variant: "destructive",
       });
       return;
+    }
+
+    // Check if skills and interests are available for better analysis
+    if (!userProfile?.skills?.length || !userProfile?.interests?.length) {
+      toast({
+        title: "Enhanced Analysis Available",
+        description:
+          "Add skills and interests to your profile for more comprehensive AI insights.",
+        variant: "default",
+      });
+      // Don't return - still allow analysis but show suggestion
     }
 
     setIsProcessing(true);
@@ -202,7 +215,8 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
             <h3 className="text-lg font-semibold mb-2">No AI Insights Yet</h3>
             <p className="text-muted-foreground mb-4">
               Generate AI-powered insights about your professional background,
-              company, and networking potential.
+              company, skills, interests, and networking potential. The more
+              complete your profile, the better the analysis.
             </p>
             <Button
               onClick={handleTriggerIntelligence}

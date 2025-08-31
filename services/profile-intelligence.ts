@@ -30,6 +30,8 @@ const UserProfileSchema = z.object({
   location: z.string().nullable().optional(),
   bio: z.string().nullable().optional(),
   website: z.string().nullable().optional(),
+  skills: z.array(z.string()).optional().default([]),
+  interests: z.array(z.string()).optional().default([]),
   preferences: z.object({
     mentor: z.boolean(),
     invest: z.boolean(),
@@ -125,7 +127,8 @@ export class ProfileIntelligenceService {
   2. Search for their professional background, current role, and company
   3. Look for recent achievements, projects, or news
   4. Search for industry insights and company information
-  5. Based on your research, provide analysis
+  5. Validate and expand on provided skills and interests through targeted searches
+  6. Based on your comprehensive research, provide analysis
 
   Search strategy:
   - Search for: "{person_name} {title} {company} professional background"
@@ -134,6 +137,8 @@ export class ProfileIntelligenceService {
   - Search for: "{person_name} LinkedIn professional experience"
   - Search for: "{person_name} {location} professional network"
   - Search for: "{website_domain} about team leadership"
+  - Search for: "{person_name} {skills} expertise experience" (when skills provided)
+  - Search for: "{person_name} {interests} involvement activities" (when interests provided)
   - Search for: "{person_name} {industry} expertise skills"
 
   After completing your searches, provide your analysis in this exact JSON format:
@@ -141,14 +146,14 @@ export class ProfileIntelligenceService {
   FOR SUCCESSFUL SEARCHES (regardless of information quality):
   {
     "success": true,
-    "summary": "A concise 2-3 sentence professional summary based on available information from your research",
-    "analysis": "Detailed analysis covering: Professional Background, Company Information, Expertise & Skills, Industry Standing, Recent Activities, and Networking Potential - based on whatever information you found in the search results"
+    "summary": "A concise 2-3 sentence professional summary based on available information from your research, highlighting key skills and professional interests",
+    "analysis": "Detailed analysis covering: Professional Background, Company Information, Skills & Professional Interests, Industry Standing, Recent Activities, and Networking Potential - based on whatever information you found in the search results."
   }
 
   FOR FAILED SEARCHES (only when search operations encounter technical errors):
   {
     "success": false,
-    "error": "Specific technical error message explaining why the search operation failed (e.g., 'Search API returned an error', 'Search operation timed out', etc.)"
+    "error": "Specific technical error message explaining why the search operation failed (e.g., 'Search API returned an error', 'Search operation timed out', 'Search operation too many requests', etc.)"
   }
 
   Guidelines:
@@ -157,7 +162,8 @@ export class ProfileIntelligenceService {
   - If searches return little or irrelevant information search more deeply, still provide summary and analysis with available data
   - Only return success: false for actual technical search failures, not for lack of information
   - Be factual and professional, citing what you found in searches
-  - Focus on business networking relevance
+  - Focus on business networking relevance with emphasis on skills alignment and shared interests
+  - When skills and interests are provided, validate them through research and suggest related areas
   - Aim for 300-500 words in the detailed analysis
   - Always search before analyzing`,
     });
@@ -421,6 +427,13 @@ export class ProfileIntelligenceService {
         "consultant",
         "founder",
         "lead",
+        "designer",
+        "product",
+        "marketing",
+        "sales",
+        "finance",
+        "hr",
+        "operations",
       ];
       roleKeywords.forEach((keyword) => {
         if (userProfile.title.toLowerCase().includes(keyword)) {
@@ -439,10 +452,24 @@ export class ProfileIntelligenceService {
       tags.push(`location:${userProfile.location.toLowerCase()}`);
     }
 
+    // Skills tags
+    if (userProfile.skills && Array.isArray(userProfile.skills)) {
+      userProfile.skills.forEach((skill: string) => {
+        tags.push(`skill:${skill.toLowerCase()}`);
+      });
+    }
+
+    // Interests tags
+    if (userProfile.interests && Array.isArray(userProfile.interests)) {
+      userProfile.interests.forEach((interest: string) => {
+        tags.push(`interest:${interest.toLowerCase()}`);
+      });
+    }
+
     // Preference tags
     Object.entries(userProfile.preferences).forEach(([key, value]) => {
       if (value) {
-        tags.push(`interest:${key}`);
+        tags.push(`preference:${key}`);
       }
     });
 
@@ -465,17 +492,19 @@ Company: ${userProfile.company || "Not specified"}
 Location: ${userProfile.location || "Not specified"}
 Website: ${userProfile.website || "Not specified"}
 Bio: ${userProfile.bio || "Not specified"}
+Skills: ${userProfile.skills?.join(", ") || "Not specified"}
+Interests: ${userProfile.interests?.join(", ") || "Not specified"}
+Preferences: ${Object.entries(userProfile.preferences)
+        .filter(([_, value]) => value)
+        .map(([key, _]) => key)
+        .join(", ")}
+        
 
 Professional Summary:
 ${summary}
 
 Detailed Analysis:
 ${analysis}
-
-Professional Interests: ${Object.entries(userProfile.preferences)
-        .filter(([_, value]) => value)
-        .map(([key, _]) => key)
-        .join(", ")}
 `;
 
       // Remove existing document
@@ -508,6 +537,19 @@ Professional Interests: ${Object.entries(userProfile.preferences)
             company: userProfile.company,
             location: userProfile.location,
             website: userProfile.website,
+            skills: userProfile.skills || [],
+            interests: userProfile.interests || [],
+            
+            // Normalized versions for easier searching
+            skills_normalized: (userProfile.skills || []).map((skill: string) =>
+              skill.toLowerCase()
+            ),
+            interests_normalized: (userProfile.interests || []).map(
+              (interest: string) => interest.toLowerCase()
+            ),
+            // Simple location parsing for better matching
+            location_city: userProfile.location?.split(',')[0]?.trim().toLowerCase() || "",
+            location_state: userProfile.location?.split(',')[1]?.trim().toLowerCase() || "",
             type: "profile_intelligence",
             created_at: new Date().toISOString(),
             preferences: userProfile.preferences,
@@ -516,6 +558,20 @@ Professional Interests: ${Object.entries(userProfile.preferences)
             title_keywords: userProfile.title?.toLowerCase().split(" ") || [],
             company_keywords:
               userProfile.company?.toLowerCase().split(" ") || [],
+            skills_keywords: (userProfile.skills || []).flatMap(
+              (skill: string) =>
+                skill
+                  .toLowerCase()
+                  .split(/[\/\s-]+/)
+                  .filter((word) => word.length > 2)
+            ),
+            interests_keywords: (userProfile.interests || []).flatMap(
+              (interest: string) =>
+                interest
+                  .toLowerCase()
+                  .split(/[\/\s-]+/)
+                  .filter((word) => word.length > 2)
+            ),
           },
           embedding: embedding,
         });
@@ -749,6 +805,16 @@ Company: ${validatedProfile.company || "Not specified"}
 Location: ${validatedProfile.location || "Not specified"}
 Bio: ${validatedProfile.bio || "Not specified"}
 Website: ${validatedProfile.website || "Not specified"}
+Skills: ${
+          validatedProfile.skills?.length
+            ? validatedProfile.skills.join(", ")
+            : "Not specified"
+        }
+Interests: ${
+          validatedProfile.interests?.length
+            ? validatedProfile.interests.join(", ")
+            : "Not specified"
+        }
 Professional Interests: ${
           Object.entries(validatedProfile.preferences)
             .filter(([_, value]) => value)
@@ -765,14 +831,29 @@ Step 2: Search for "${
 Step 3: Search for "${validatedProfile.name} ${
           validatedProfile.location || "professional"
         } career achievements" using the tavily_search_results_json tool
-Step 4: Search for "${
-          validatedProfile.website
-            ? validatedProfile.website
-                .replace(/https?:\/\//, "")
-                .split("/")[0] + " about team"
-            : validatedProfile.name + " professional profile"
-        }" using the tavily_search_results_json tool
-Step 5: Based on your comprehensive research, provide your analysis in the specified JSON format.
+${
+  validatedProfile.skills?.length
+    ? `Step 4: Search for "${validatedProfile.skills.slice(0, 3).join(" ")} ${
+        validatedProfile.name
+      } expertise experience" using the tavily_search_results_json tool
+Step 5: Search for "${validatedProfile.interests?.slice(0, 3).join(" ")} ${
+        validatedProfile.name
+      } professional involvement" using the tavily_search_results_json tool
+Step 6: Search for "${
+        validatedProfile.website
+          ? validatedProfile.website.replace(/https?:\/\//, "").split("/")[0] +
+            " about team"
+          : validatedProfile.name + " professional profile"
+      }" using the tavily_search_results_json tool
+Step 7: Based on your comprehensive research, provide your analysis in the specified JSON format.`
+    : `Step 4: Search for "${
+        validatedProfile.website
+          ? validatedProfile.website.replace(/https?:\/\//, "").split("/")[0] +
+            " about team"
+          : validatedProfile.name + " professional profile"
+      }" using the tavily_search_results_json tool
+Step 5: Based on your comprehensive research, provide your analysis in the specified JSON format.`
+}
 
 You MUST use the tavily_search_results_json tool multiple times before providing any analysis.`,
       });

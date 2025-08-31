@@ -503,7 +503,13 @@ export function EditProfileModal({
                     <Code className="w-4 h-4 mr-2" />
                     Skills ({skills.length}/10)
                   </span>
-                  <span className={`text-xs ${skills.length < 1 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                  <span
+                    className={`text-xs ${
+                      skills.length < 1
+                        ? "text-destructive"
+                        : "text-muted-foreground"
+                    }`}
+                  >
                     Min 1 required
                   </span>
                 </Label>
@@ -616,7 +622,13 @@ export function EditProfileModal({
                     <Lightbulb className="w-4 h-4 mr-2" />
                     Interests ({interests.length}/10)
                   </span>
-                  <span className={`text-xs ${interests.length < 1 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                  <span
+                    className={`text-xs ${
+                      interests.length < 1
+                        ? "text-destructive"
+                        : "text-muted-foreground"
+                    }`}
+                  >
                     Min 1 required
                   </span>
                 </Label>
@@ -726,9 +738,15 @@ export function EditProfileModal({
 
           {/* Save Button - Always Visible */}
           <div className="flex flex-col items-end pt-4 border-t space-y-2">
-            <Button 
-              onClick={handleSave} 
-              disabled={isLoading || skills.length < 1 || interests.length < 1 || skills.length > 10 || interests.length > 10} 
+            <Button
+              onClick={handleSave}
+              disabled={
+                isLoading ||
+                skills.length < 1 ||
+                interests.length < 1 ||
+                skills.length > 10 ||
+                interests.length > 10
+              }
               size="lg"
             >
               {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

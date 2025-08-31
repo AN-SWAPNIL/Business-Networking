@@ -43,7 +43,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`🚀 Triggering profile intelligence for user: ${profile.name}`);
+    // Log if skills/interests could enhance analysis
+    if (!profile.skills?.length || !profile.interests?.length) {
+      console.log(
+        `� Enhanced analysis available: User ${profile.name} could benefit from adding skills and interests`
+      );
+    }
+
+    console.log(
+      `�🚀 Triggering profile intelligence for user: ${profile.name}`
+    );
+    console.log(
+      `📊 Profile data includes: ${profile.skills?.length || 0} skills, ${
+        profile.interests?.length || 0
+      } interests`
+    );
 
     // Initialize and run profile intelligence service
     const intelligenceService = new ProfileIntelligenceService();
@@ -152,15 +166,13 @@ export async function GET(request: NextRequest) {
       content.substring(0, 300) + "..."
     );
 
-    // Extract summary and analysis from content with simpler regex
+    // Extract summary and analysis from content with improved regex
     // Look for "Professional Summary:" followed by content until "Detailed Analysis:"
     const summaryMatch = content.match(
-      /Professional Summary:\s*([\s\S]*?)\s*Detailed Analysis:/
+      /Professional Summary:\s*([\s\S]*?)\s*(?=Detailed Analysis:|$)/
     );
-    // Look for "Detailed Analysis:" followed by content until "Professional Interests:"
-    const analysisMatch = content.match(
-      /Detailed Analysis:\s*([\s\S]*?)\s*Professional Interests:/
-    );
+    // Look for "Detailed Analysis:" followed by content until end
+    const analysisMatch = content.match(/Detailed Analysis:\s*([\s\S]*?)$/);
 
     let summary = "";
     let analysis = "";
@@ -194,9 +206,6 @@ export async function GET(request: NextRequest) {
           const afterAnalysisHeader = section.split("Detailed Analysis:")[1];
           if (afterAnalysisHeader)
             analysisParts.push(afterAnalysisHeader.trim());
-        } else if (section.includes("Professional Interests:")) {
-          inSummary = false;
-          inAnalysis = false;
         } else if (inSummary && section.trim()) {
           summaryParts.push(section.trim());
         } else if (inAnalysis && section.trim()) {

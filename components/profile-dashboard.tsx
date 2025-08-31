@@ -355,15 +355,16 @@ export function ProfileDashboard() {
                   {profile.skills && profile.skills.length > 0 ? (
                     <>
                       {profile.skills.slice(0, 6).map((skill) => (
-                        <Badge key={skill} variant="default" className="text-xs">
+                        <Badge
+                          key={skill}
+                          variant="default"
+                          className="text-xs"
+                        >
                           {skill}
                         </Badge>
                       ))}
                       {profile.skills.length > 6 && (
-                        <Badge
-                          variant="default"
-                          className="text-xs opacity-70"
-                        >
+                        <Badge variant="default" className="text-xs opacity-70">
                           +{profile.skills.length - 6} more
                         </Badge>
                       )}
