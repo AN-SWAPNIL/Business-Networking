@@ -164,7 +164,7 @@ export class ProfileIntelligenceService {
   - Be factual and professional, citing what you found in searches
   - Focus on business networking relevance with emphasis on skills alignment and shared interests
   - When skills and interests are provided, validate them through research and suggest related areas
-  - Aim for 300-500 words in the detailed analysis
+  - Aim for 300-500 words in the detailed analysis (but not cut in the middle)
   - Always search before analyzing`,
     });
   }
