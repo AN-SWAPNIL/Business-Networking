@@ -98,6 +98,22 @@ CREATE TABLE IF NOT EXISTS connections (
   UNIQUE(requester_id, recipient_id)
 );
 
+-- Matches cache table for RAG agent results
+CREATE TABLE IF NOT EXISTS matches_cache (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+  matches_data JSONB NOT NULL, -- Array of RAG agent match results
+  total_matches INTEGER DEFAULT 0,
+  cache_metadata JSONB DEFAULT '{
+    "ai_processing_time": 0,
+    "total_profiles_analyzed": 0,
+    "cache_version": "1.0"
+  }'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  expires_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() + INTERVAL '24 hours')
+);
+
 -- Messages table for chat functionality
 CREATE TABLE IF NOT EXISTS messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -162,6 +178,12 @@ CREATE INDEX IF NOT EXISTS idx_connections_recipient_id ON connections(recipient
 CREATE INDEX IF NOT EXISTS idx_connections_status ON connections(status);
 CREATE INDEX IF NOT EXISTS idx_connections_score ON connections(compatibility_score DESC);
 
+-- Matches cache indexes
+CREATE INDEX IF NOT EXISTS idx_matches_cache_user_id ON matches_cache(user_id);
+CREATE INDEX IF NOT EXISTS idx_matches_cache_expires_at ON matches_cache(expires_at);
+CREATE INDEX IF NOT EXISTS idx_matches_cache_updated_at ON matches_cache(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_matches_cache_data ON matches_cache USING GIN(matches_data);
+
 -- Messages indexes
 CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_messages_recipient_id ON messages(recipient_id);
@@ -188,6 +210,7 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE business_cards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE connections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE matches_cache ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_activity ENABLE ROW LEVEL SECURITY;
@@ -228,6 +251,19 @@ CREATE POLICY "Users can create connection requests" ON connections
 
 CREATE POLICY "Users can update own connections" ON connections
   FOR UPDATE USING (auth.uid() = requester_id OR auth.uid() = recipient_id);
+
+-- Matches cache policies
+CREATE POLICY "Users can view own matches cache" ON matches_cache
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own matches cache" ON matches_cache
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own matches cache" ON matches_cache
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own matches cache" ON matches_cache
+  FOR DELETE USING (auth.uid() = user_id);
 
 -- Messages policies
 CREATE POLICY "Users can view own messages" ON messages
@@ -303,6 +339,96 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Function to clean up expired matches cache
+CREATE OR REPLACE FUNCTION public.cleanup_expired_matches_cache()
+RETURNS INTEGER AS $$
+DECLARE
+  deleted_count INTEGER;
+BEGIN
+  DELETE FROM matches_cache WHERE expires_at < NOW();
+  GET DIAGNOSTICS deleted_count = ROW_COUNT;
+  RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to upsert matches cache with automatic expiry extension
+CREATE OR REPLACE FUNCTION public.upsert_matches_cache(
+  p_user_id UUID,
+  p_matching_type TEXT DEFAULT 'all',
+  p_matches_data JSONB DEFAULT '[]'::jsonb,
+  p_total_matches INTEGER DEFAULT 0,
+  p_cache_metadata JSONB DEFAULT '{}'::jsonb,
+  p_cache_hours INTEGER DEFAULT 24
+)
+RETURNS UUID AS $$
+DECLARE
+  cache_id UUID;
+BEGIN
+  INSERT INTO matches_cache (
+    user_id, 
+    matches_data, 
+    total_matches, 
+    cache_metadata,
+    expires_at
+  )
+  VALUES (
+    p_user_id,
+    p_matches_data,
+    COALESCE(p_total_matches, 
+      CASE WHEN jsonb_typeof(p_matches_data) = 'array' 
+           THEN jsonb_array_length(p_matches_data) 
+           ELSE 0 END),
+    COALESCE(p_cache_metadata, '{}'::jsonb),
+    NOW() + (p_cache_hours || ' hours')::INTERVAL
+  )
+  ON CONFLICT (user_id) 
+  DO UPDATE SET
+    matches_data = EXCLUDED.matches_data,
+    total_matches = EXCLUDED.total_matches,
+    cache_metadata = EXCLUDED.cache_metadata,
+    updated_at = NOW(),
+    expires_at = NOW() + (p_cache_hours || ' hours')::INTERVAL
+  RETURNING id INTO cache_id;
+  
+  RETURN cache_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to check if matches cache is valid and not expired
+CREATE OR REPLACE FUNCTION public.is_matches_cache_valid(p_user_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM matches_cache 
+    WHERE user_id = p_user_id 
+    AND expires_at > NOW()
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to get cached matches with metadata
+CREATE OR REPLACE FUNCTION public.get_cached_matches(p_user_id UUID)
+RETURNS TABLE (
+  matches_data JSONB,
+  total_matches INTEGER,
+  cache_age_minutes INTEGER,
+  cache_metadata JSONB
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    mc.matches_data,
+    mc.total_matches,
+    EXTRACT(EPOCH FROM (NOW() - mc.updated_at))::INTEGER / 60 AS cache_age_minutes,
+    mc.cache_metadata
+  FROM matches_cache mc
+  WHERE mc.user_id = p_user_id 
+  AND mc.expires_at > NOW()
+  ORDER BY mc.updated_at DESC
+  LIMIT 1;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Function for LangChain vector similarity search
 CREATE OR REPLACE FUNCTION public.match_documents (
@@ -414,6 +540,12 @@ CREATE TRIGGER update_connections_updated_at
   BEFORE UPDATE ON connections
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
+-- Trigger for updating updated_at on matches_cache
+DROP TRIGGER IF EXISTS update_matches_cache_updated_at ON matches_cache;
+CREATE TRIGGER update_matches_cache_updated_at
+  BEFORE UPDATE ON matches_cache
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
 -- Trigger for updating connection stats
 DROP TRIGGER IF EXISTS update_connection_stats_trigger ON connections;
 CREATE TRIGGER update_connection_stats_trigger
@@ -478,6 +610,13 @@ WHERE c.status = 'accepted';
 -- ====================================================================
 -- SETUP COMPLETION
 -- ====================================================================
+
+-- Grant specific permissions for matches cache
+GRANT ALL ON TABLE matches_cache TO authenticated;
+GRANT EXECUTE ON FUNCTION public.cleanup_expired_matches_cache() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.upsert_matches_cache(UUID, TEXT, JSONB, INTEGER, JSONB, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_matches_cache_valid(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_cached_matches(UUID) TO authenticated;
 
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA public TO anon, authenticated;

@@ -1,12 +1,27 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Heart, Users, TrendingUp, MessageSquare, Handshake, Building, Sparkles, RefreshCw } from "lucide-react"
-import { MatchCard } from "@/components/match-card"
-import { MatchingAlgorithm } from "@/lib/matching-algorithm"
+import { useState, useMemo, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Heart,
+  Users,
+  TrendingUp,
+  MessageSquare,
+  Handshake,
+  Building,
+  Sparkles,
+  RefreshCw,
+} from "lucide-react";
+import { MatchCard } from "@/components/match-card";
+import { useAuth } from "@/hooks/use-auth";
 
 // Mock current user data
 const currentUser = {
@@ -24,7 +39,7 @@ const currentUser = {
   },
   skills: ["React", "Node.js", "TypeScript", "AWS"],
   interests: ["AI/ML", "Fintech", "SaaS"],
-}
+};
 
 // Mock users data (same as directory but with additional matching fields)
 const allUsers = [
@@ -36,7 +51,13 @@ const allUsers = [
     location: "San Francisco, CA",
     bio: "Experienced product manager passionate about building user-centric solutions. Love mentoring and discussing product strategy.",
     avatar: "/professional-woman-diverse.png",
-    preferences: { mentor: false, invest: false, discuss: true, collaborate: true, hire: false },
+    preferences: {
+      mentor: false,
+      invest: false,
+      discuss: true,
+      collaborate: true,
+      hire: false,
+    },
     skills: ["Product Strategy", "User Research", "Analytics", "Agile"],
     interests: ["SaaS", "B2B", "Growth"],
     connections: 156,
@@ -50,7 +71,13 @@ const allUsers = [
     location: "San Francisco, CA",
     bio: "Full-stack developer eager to learn and grow. Looking for mentorship opportunities and interesting projects.",
     avatar: "/professional-man.png",
-    preferences: { mentor: false, invest: false, discuss: true, collaborate: true, hire: false },
+    preferences: {
+      mentor: false,
+      invest: false,
+      discuss: true,
+      collaborate: true,
+      hire: false,
+    },
     skills: ["JavaScript", "React", "Python", "SQL"],
     interests: ["Web Development", "AI/ML", "Open Source"],
     connections: 89,
@@ -64,7 +91,13 @@ const allUsers = [
     location: "Austin, TX",
     bio: "Creative UX designer focused on accessibility and inclusive design. Open to mentoring junior designers.",
     avatar: "/professional-woman-designer.png",
-    preferences: { mentor: true, invest: false, discuss: true, collaborate: false, hire: false },
+    preferences: {
+      mentor: true,
+      invest: false,
+      discuss: true,
+      collaborate: false,
+      hire: false,
+    },
     skills: ["UI/UX Design", "Figma", "User Research", "Accessibility"],
     interests: ["Design Systems", "Accessibility", "EdTech"],
     connections: 203,
@@ -78,7 +111,13 @@ const allUsers = [
     location: "Palo Alto, CA",
     bio: "Early-stage investor focused on B2B SaaS and fintech. Always interested in meeting innovative entrepreneurs.",
     avatar: "/professional-investor.png",
-    preferences: { mentor: true, invest: true, discuss: true, collaborate: false, hire: false },
+    preferences: {
+      mentor: true,
+      invest: true,
+      discuss: true,
+      collaborate: false,
+      hire: false,
+    },
     skills: ["Investment Analysis", "Due Diligence", "Strategy", "Networking"],
     interests: ["Fintech", "SaaS", "AI/ML", "Enterprise Software"],
     connections: 342,
@@ -92,8 +131,19 @@ const allUsers = [
     location: "Chicago, IL",
     bio: "Strategic marketing leader with 10+ years experience. Passionate about brand building and growth marketing.",
     avatar: "/professional-woman-marketing.png",
-    preferences: { mentor: true, invest: false, discuss: true, collaborate: true, hire: true },
-    skills: ["Growth Marketing", "Brand Strategy", "Content Marketing", "Analytics"],
+    preferences: {
+      mentor: true,
+      invest: false,
+      discuss: true,
+      collaborate: true,
+      hire: true,
+    },
+    skills: [
+      "Growth Marketing",
+      "Brand Strategy",
+      "Content Marketing",
+      "Analytics",
+    ],
     interests: ["B2B Marketing", "SaaS", "Growth"],
     connections: 278,
     joinedDate: "January 2024",
@@ -106,58 +156,184 @@ const allUsers = [
     location: "Seattle, WA",
     bio: "Technology executive with expertise in scaling engineering teams. Looking to hire top talent and discuss tech trends.",
     avatar: "/professional-man-cto.png",
-    preferences: { mentor: true, invest: false, discuss: true, collaborate: false, hire: true },
-    skills: ["Engineering Leadership", "System Architecture", "Team Building", "Strategy"],
+    preferences: {
+      mentor: true,
+      invest: false,
+      discuss: true,
+      collaborate: false,
+      hire: true,
+    },
+    skills: [
+      "Engineering Leadership",
+      "System Architecture",
+      "Team Building",
+      "Strategy",
+    ],
     interests: ["Cloud Computing", "AI/ML", "Engineering Culture"],
     connections: 445,
     joinedDate: "November 2023",
   },
-]
+];
 
 export function CollaborationMatches() {
-  const [activeTab, setActiveTab] = useState("all")
-  const [refreshKey, setRefreshKey] = useState(0)
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState("all");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [allMatches, setAllMatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
-  const matchingAlgorithm = new MatchingAlgorithm()
+  // Fetch matches from API
+  const fetchMatches = async () => {
+    if (!user) return;
 
-  // Calculate matches using the algorithm
-  const allMatches = useMemo(() => {
-    return matchingAlgorithm.findMatches(currentUser, allUsers)
-  }, [refreshKey])
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `/api/matches?algorithm=rag&category=all&limit=50`
+      );
+      const data = await response.json();
 
-  // Filter matches by category
+      if (data.success) {
+        console.log("🔍 Received matches data:", data.matches);
+
+        // Simple validation since user data now comes from database
+        const validMatches = (data.matches || []).filter((match: any) => {
+          return match && match.user && match.user.id && match.user.name;
+        });
+
+        console.log(
+          `🔍 Using ${validMatches.length} valid matches from database`
+        );
+
+        setAllMatches(validMatches);
+        setCurrentUser(
+          data.currentUser || {
+            id: user.id,
+            name: "John Smith",
+            title: "Senior Software Engineer",
+            company: "Tech Solutions Inc.",
+            location: "San Francisco, CA",
+            preferences: {
+              mentor: true,
+              invest: false,
+              discuss: true,
+              collaborate: true,
+              hire: false,
+            },
+            skills: ["React", "Node.js", "TypeScript", "AWS"],
+            interests: ["AI/ML", "Fintech", "SaaS"],
+          }
+        );
+      }
+    } catch (error) {
+      console.error("Error fetching matches:", error);
+      // Fallback to mock data structure
+      setAllMatches([]);
+      setCurrentUser({
+        id: "current",
+        name: "John Smith",
+        title: "Senior Software Engineer",
+        company: "Tech Solutions Inc.",
+        location: "San Francisco, CA",
+        preferences: {
+          mentor: true,
+          invest: false,
+          discuss: true,
+          collaborate: true,
+          hire: false,
+        },
+        skills: ["React", "Node.js", "TypeScript", "AWS"],
+        interests: ["AI/ML", "Fintech", "SaaS"],
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load matches on component mount and when user changes
+  useEffect(() => {
+    if (user) {
+      fetchMatches();
+    }
+  }, [user, refreshKey]);
+
+  // Default currentUser if not set
+  const effectiveCurrentUser = currentUser || {
+    id: "current",
+    name: "John Smith",
+    title: "Senior Software Engineer",
+    company: "Tech Solutions Inc.",
+    location: "San Francisco, CA",
+    preferences: {
+      mentor: true,
+      invest: false,
+      discuss: true,
+      collaborate: true,
+      hire: false,
+    },
+    skills: ["React", "Node.js", "TypeScript", "AWS"],
+    interests: ["AI/ML", "Fintech", "SaaS"],
+  };
+
+  // Safety check for preferences
+  const safeCurrentUser = {
+    ...effectiveCurrentUser,
+    preferences: effectiveCurrentUser.preferences || {
+      mentor: true,
+      invest: false,
+      discuss: true,
+      collaborate: true,
+      hire: false,
+    },
+  };
+
+  // Filter matches by category with safety checks
   const getMatchesByCategory = (category: string) => {
+    const safeMatches = allMatches.filter(
+      (match: any) => match && match.user && typeof match.user === "object"
+    );
+
     switch (category) {
       case "mentorship":
-        return allMatches.filter(
-          (match) =>
-            (currentUser.preferences.mentor && !match.user.preferences.mentor) ||
-            (!currentUser.preferences.mentor && match.user.preferences.mentor),
-        )
+        return safeMatches.filter(
+          (match: any) =>
+            (safeCurrentUser.preferences.mentor &&
+              !match.user.preferences?.mentor) ||
+            (!safeCurrentUser.preferences.mentor &&
+              match.user.preferences?.mentor)
+        );
       case "collaboration":
-        return allMatches.filter((match) => currentUser.preferences.collaborate && match.user.preferences.collaborate)
+        return safeMatches.filter(
+          (match: any) =>
+            safeCurrentUser.preferences.collaborate &&
+            match.user.preferences?.collaborate
+        );
       case "investment":
-        return allMatches.filter(
-          (match) =>
-            (currentUser.preferences.invest && !match.user.preferences.invest) ||
-            (!currentUser.preferences.invest && match.user.preferences.invest),
-        )
+        return safeMatches.filter(
+          (match: any) =>
+            (safeCurrentUser.preferences.invest &&
+              !match.user.preferences?.invest) ||
+            (!safeCurrentUser.preferences.invest &&
+              match.user.preferences?.invest)
+        );
       case "hiring":
-        return allMatches.filter(
-          (match) =>
-            (currentUser.preferences.hire && !match.user.preferences.hire) ||
-            (!currentUser.preferences.hire && match.user.preferences.hire),
-        )
+        return safeMatches.filter(
+          (match: any) =>
+            (safeCurrentUser.preferences.hire &&
+              !match.user.preferences?.hire) ||
+            (!safeCurrentUser.preferences.hire && match.user.preferences?.hire)
+        );
       default:
-        return allMatches
+        return safeMatches;
     }
-  }
+  };
 
-  const filteredMatches = getMatchesByCategory(activeTab)
+  const filteredMatches = getMatchesByCategory(activeTab);
 
   const refreshMatches = () => {
-    setRefreshKey((prev) => prev + 1)
-  }
+    setRefreshKey((prev) => prev + 1);
+  };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -168,7 +344,9 @@ export function CollaborationMatches() {
             <Sparkles className="w-8 h-8 mr-3" />
             Your Matches
           </h1>
-          <p className="text-muted-foreground">Discover professionals perfect for collaboration</p>
+          <p className="text-muted-foreground">
+            Discover professionals perfect for collaboration
+          </p>
         </div>
         <Button onClick={refreshMatches} variant="outline">
           <RefreshCw className="w-4 h-4 mr-2" />
@@ -197,9 +375,14 @@ export function CollaborationMatches() {
                 <p className="text-2xl font-bold">
                   {
                     allMatches.filter(
-                      (match) =>
-                        (currentUser.preferences.mentor && !match.user.preferences.mentor) ||
-                        (!currentUser.preferences.mentor && match.user.preferences.mentor),
+                      (match: any) =>
+                        match &&
+                        match.user &&
+                        match.user.preferences &&
+                        ((safeCurrentUser.preferences.mentor &&
+                          !match.user.preferences.mentor) ||
+                          (!safeCurrentUser.preferences.mentor &&
+                            match.user.preferences.mentor))
                     ).length
                   }
                 </p>
@@ -216,7 +399,12 @@ export function CollaborationMatches() {
                 <p className="text-2xl font-bold">
                   {
                     allMatches.filter(
-                      (match) => currentUser.preferences.collaborate && match.user.preferences.collaborate,
+                      (match: any) =>
+                        match &&
+                        match.user &&
+                        match.user.preferences &&
+                        safeCurrentUser.preferences.collaborate &&
+                        match.user.preferences.collaborate
                     ).length
                   }
                 </p>
@@ -231,9 +419,15 @@ export function CollaborationMatches() {
               <TrendingUp className="w-5 h-5 text-primary" />
               <div>
                 <p className="text-2xl font-bold">
-                  {allMatches.filter((match) => match.compatibilityScore >= 80).length}
+                  {
+                    allMatches.filter(
+                      (match: any) => match && match.compatibilityScore >= 80
+                    ).length
+                  }
                 </p>
-                <p className="text-sm text-muted-foreground">High Compatibility</p>
+                <p className="text-sm text-muted-foreground">
+                  High Compatibility
+                </p>
               </div>
             </div>
           </CardContent>
@@ -248,7 +442,8 @@ export function CollaborationMatches() {
             How We Match You
           </CardTitle>
           <CardDescription>
-            Our intelligent algorithm considers multiple factors to find your perfect collaborators
+            Our intelligent algorithm considers multiple factors to find your
+            perfect collaborators
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -268,7 +463,8 @@ export function CollaborationMatches() {
               </div>
               <h4 className="font-medium mb-2">Professional Context</h4>
               <p className="text-sm text-muted-foreground">
-                Location, company, and industry alignment for relevant connections
+                Location, company, and industry alignment for relevant
+                connections
               </p>
             </div>
             <div className="text-center">
@@ -276,7 +472,9 @@ export function CollaborationMatches() {
                 <MessageSquare className="w-6 h-6 text-primary" />
               </div>
               <h4 className="font-medium mb-2">Shared Interests</h4>
-              <p className="text-sm text-muted-foreground">Common skills, technologies, and professional interests</p>
+              <p className="text-sm text-muted-foreground">
+                Common skills, technologies, and professional interests
+              </p>
             </div>
           </div>
         </CardContent>
@@ -285,14 +483,21 @@ export function CollaborationMatches() {
       {/* Match Categories */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
         <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="all">All Matches ({allMatches.length})</TabsTrigger>
+          <TabsTrigger value="all">
+            All Matches ({allMatches.length})
+          </TabsTrigger>
           <TabsTrigger value="mentorship">
             Mentorship (
             {
               allMatches.filter(
-                (match) =>
-                  (currentUser.preferences.mentor && !match.user.preferences.mentor) ||
-                  (!currentUser.preferences.mentor && match.user.preferences.mentor),
+                (match: any) =>
+                  match &&
+                  match.user &&
+                  match.user.preferences &&
+                  ((safeCurrentUser.preferences.mentor &&
+                    !match.user.preferences.mentor) ||
+                    (!safeCurrentUser.preferences.mentor &&
+                      match.user.preferences.mentor))
               ).length
             }
             )
@@ -300,8 +505,14 @@ export function CollaborationMatches() {
           <TabsTrigger value="collaboration">
             Collaboration (
             {
-              allMatches.filter((match) => currentUser.preferences.collaborate && match.user.preferences.collaborate)
-                .length
+              allMatches.filter(
+                (match: any) =>
+                  match &&
+                  match.user &&
+                  match.user.preferences &&
+                  safeCurrentUser.preferences.collaborate &&
+                  match.user.preferences.collaborate
+              ).length
             }
             )
           </TabsTrigger>
@@ -309,9 +520,14 @@ export function CollaborationMatches() {
             Investment (
             {
               allMatches.filter(
-                (match) =>
-                  (currentUser.preferences.invest && !match.user.preferences.invest) ||
-                  (!currentUser.preferences.invest && match.user.preferences.invest),
+                (match: any) =>
+                  match &&
+                  match.user &&
+                  match.user.preferences &&
+                  ((safeCurrentUser.preferences.invest &&
+                    !match.user.preferences.invest) ||
+                    (!safeCurrentUser.preferences.invest &&
+                      match.user.preferences.invest))
               ).length
             }
             )
@@ -320,9 +536,14 @@ export function CollaborationMatches() {
             Hiring (
             {
               allMatches.filter(
-                (match) =>
-                  (currentUser.preferences.hire && !match.user.preferences.hire) ||
-                  (!currentUser.preferences.hire && match.user.preferences.hire),
+                (match: any) =>
+                  match &&
+                  match.user &&
+                  match.user.preferences &&
+                  ((safeCurrentUser.preferences.hire &&
+                    !match.user.preferences.hire) ||
+                    (!safeCurrentUser.preferences.hire &&
+                      match.user.preferences.hire))
               ).length
             }
             )
@@ -331,10 +552,26 @@ export function CollaborationMatches() {
       </Tabs>
 
       {/* Matches Grid */}
-      {filteredMatches.length > 0 ? (
+      {loading ? (
+        <Card className="text-center py-12">
+          <CardContent>
+            <RefreshCw className="w-12 h-12 text-muted-foreground mx-auto mb-4 animate-spin" />
+            <h3 className="text-lg font-medium mb-2">
+              Finding your matches...
+            </h3>
+            <p className="text-muted-foreground">
+              Our AI is analyzing profiles to find the best connections for you
+            </p>
+          </CardContent>
+        </Card>
+      ) : filteredMatches.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredMatches.map((match) => (
-            <MatchCard key={match.user.id} match={match} currentUser={currentUser} />
+          {filteredMatches.map((match: any) => (
+            <MatchCard
+              key={match.user.id}
+              match={match}
+              currentUser={safeCurrentUser}
+            />
           ))}
         </div>
       ) : (
@@ -353,5 +590,5 @@ export function CollaborationMatches() {
         </Card>
       )}
     </div>
-  )
+  );
 }
