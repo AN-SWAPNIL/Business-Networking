@@ -102,7 +102,8 @@ export class RAGMatchingAgent {
     this.llm = new ChatGoogleGenerativeAI({
       model: "gemini-1.5-flash",
       apiKey: process.env.GOOGLE_API_KEY,
-      temperature: 0.3, // Lower temperature for more consistent matching
+      temperature: 0.7, // Lower temperature for more consistent matching
+      maxOutputTokens: 4096, // Increase max output tokens for longer responses
     });
 
     // Initialize embeddings
@@ -374,22 +375,30 @@ export class RAGMatchingAgent {
       },
       {
         name: "vector_search_profiles",
-        description: "Search for similar user profiles using vector similarity",
+        description: `Search for similar user profiles using vector similarity. This tool finds real users from the database based on semantic similarity. 
+
+USAGE EXAMPLES:
+- query: "software engineer AI machine learning startup" (combines skills and interests)
+- query: "fintech blockchain cryptocurrency trading" (industry-specific terms)
+- query: "project manager agile scrum team leadership" (role and skills)
+- filters: {excludeUserId: "requesting_user_id", minSimilarity: 0.6}
+
+RETURNS: Real user IDs and profile data from the database. Use these user IDs in subsequent tool calls.`,
         schema: z.object({
           query: z
             .string()
-            .describe("Search query for finding similar profiles"),
+            .describe("Search query combining skills, interests, industry terms, and roles"),
           filters: z
             .object({
-              excludeUserId: z.string().optional(),
-              minSimilarity: z.number().optional(),
-              location: z.string().optional(),
+              excludeUserId: z.string().optional().describe("User ID to exclude from results"),
+              minSimilarity: z.number().optional().describe("Minimum similarity score (0-1)"),
+              location: z.string().optional().describe("Location filter"),
             })
             .optional(),
           maxResults: z
             .number()
             .optional()
-            .describe("Maximum number of results to return"),
+            .describe("Maximum number of results to return (default 20)"),
         }),
       }
     );
@@ -519,9 +528,15 @@ export class RAGMatchingAgent {
       },
       {
         name: "get_user_profile",
-        description: "Get detailed user profile information",
+        description: `Get detailed user profile information from the database. Use this tool multiple times:
+        
+1. FIRST: Get the requesting user's profile to understand their background
+2. THEN: Get profiles for each user found by vector_search_profiles
+3. Use the returned data for compatibility analysis
+
+RETURNS: Real user data including skills, interests, preferences, company, location, etc.`,
         schema: z.object({
-          userId: z.string().describe("User ID to fetch profile for"),
+          userId: z.string().describe("Real user ID from database (never create fake IDs)"),
         }),
       }
     );
@@ -639,59 +654,59 @@ Return as JSON format.`;
    */
   private getSystemPrompt(): SystemMessage {
     return new SystemMessage({
-      content: `You are an intelligent professional networking matching agent. Your job is to find the best professional matches for users based on their preferences, skills, interests, and networking goals.
+      content: `You are an intelligent professional networking matching agent. You have access to tools that provide real data from the database. You MUST use these tools and then analyze the results to create matches.
 
-CRITICAL RULES:
-🚨 ONLY use real user data from the database tools - NEVER create fictional users
-🚨 If vector search returns no results, return an empty array []
-🚨 Only return users that exist in the actual database
+� CRITICAL WORKFLOW - FOLLOW EXACTLY:
 
-MATCHING CATEGORIES:
-1. MENTORSHIP: Connect mentors with mentees (complementary experience levels)
-2. COLLABORATION: Find partners for projects, startups, or professional partnerships
-3. INVESTMENT: Connect investors with entrepreneurs/startups seeking funding
-4. HIRING: Match employers with potential candidates
-5. DISCUSSION: Find professionals for knowledge sharing and industry discussions
+1. FIRST: Call get_user_profile(userId: "requesting_user_id") to understand who is requesting matches
+2. SECOND: Call vector_search_profiles with a query based on the user's skills/interests  
+3. THIRD: Analyze the vector search results and select the best candidates
+4. FOURTH: Return a JSON array with real user IDs from the vector search results
 
-YOUR PROCESS:
-1. Use vector_search_profiles to find semantically similar profiles
-2. Use get_user_profile to get detailed information about the requesting user
-3. Use analyze_compatibility to perform AI-powered compatibility analysis
-4. Return ranked matches with detailed reasoning
+🎯 EXAMPLE WORKFLOW:
 
-MATCHING CRITERIA:
-- Semantic similarity (vector search results)
-- Preference alignment (mentor/mentee, investor/entrepreneur, etc.)
-- Skills complementarity 
-- Shared professional interests
-- Location compatibility (when relevant)
-- Professional context (industry, company type, role level)
+When you get vector search results like:
+[{userId: "63b42074-e408-4362-a874-035ea22da5f1", name: "Ahmmad Nur Swapnil", skills: ["JavaScript", "Node.js"], ...}]
 
-QUALITY STANDARDS:
-- Only return matches with >40% compatibility
-- Provide specific, actionable match reasons
-- Consider both explicit preferences and implicit compatibility
-- Prioritize high-quality connections over quantity
-- Include AI reasoning for each match
-
-CRITICAL OUTPUT FORMAT:
-When you have completed your analysis and are ready to provide final results, you MUST return ONLY a valid JSON array with no additional text, comments, or formatting. 
-
-Return ONLY the AI analysis data - user profiles will be fetched from the database separately:
-
+You MUST return matches using those EXACT user IDs:
 [
   {
-    "user_id": "actual_user_id_from_database",
-    "compatibilityScore": 85,
-    "reasoning": "Detailed explanation of why this is a good match",
-    "commonInterests": ["Shared Interest 1", "Shared Interest 2"],
-    "complementarySkills": ["Skill they have that you need", "Skill you have that they need"]
+    "user_id": "63b42074-e408-4362-a874-035ea22da5f1",
+    "compatibilityScore": 75,
+    "reasoning": "Both have JavaScript skills and share interest in DevOps",
+    "commonInterests": ["DevOps", "JavaScript"],
+    "complementarySkills": ["Node.js", "Data Science"]
   }
 ]
 
-Do NOT include full user profiles - only return user_id and AI analysis. Do NOT include any text before or after the JSON array. Do NOT wrap it in code blocks. Return pure JSON only.
+🔧 CRITICAL RULES:
+- NEVER return empty array [] unless vector search finds NO users
+- ALWAYS use real user_id values from vector search tool results
+- NEVER create fake UUIDs or placeholder data
+- Base compatibilityScore on actual shared skills/interests from tool data
+- Include specific reasoning based on the actual user profiles
 
-Always use the available tools to gather information and perform analysis before making recommendations.`,
+� MATCHING CRITERIA:
+- Skills overlap (JavaScript, Python, etc.)
+- Interest alignment (AI, DevOps, Fintech, etc.) 
+- Complementary experience levels
+- Geographic proximity
+- Professional context (company, industry)
+
+🎯 FINAL OUTPUT FORMAT:
+After using tools and finding users, return this JSON structure with REAL user IDs:
+
+[
+  {
+    "user_id": "real_uuid_from_vector_search",
+    "compatibilityScore": 85,
+    "reasoning": "Specific match reasoning based on tool data",
+    "commonInterests": ["Actual shared interests"],
+    "complementarySkills": ["Actual complementary skills"]
+  }
+]
+
+🚨 REMEMBER: Use the tool results to create meaningful matches. Don't return empty arrays when users are found!`,
     });
   }
 
@@ -830,11 +845,17 @@ Always use the available tools to gather information and perform analysis before
   /**
    * LLM node that can call tools or respond
    */
-  private async llmCall(state: typeof MessagesAnnotation.State) {
-    const response = await this.llm.invoke([
+  private async agentNode(state: typeof MessagesAnnotation.State) {
+    console.log("---CALL AGENT---");
+    
+    // Bind tools to the LLM
+    const llmWithTools = this.llm.bindTools(this.tools);
+    
+    const response = await llmWithTools.invoke([
       this.getSystemPrompt(),
       ...state.messages,
     ]);
+    
     return { messages: [response] };
   }
 
@@ -843,9 +864,15 @@ Always use the available tools to gather information and perform analysis before
    */
   private shouldContinue(state: typeof MessagesAnnotation.State) {
     const lastMessage = state.messages[state.messages.length - 1];
-    if (lastMessage.additional_kwargs?.tool_calls?.length) {
+    console.log("---DECIDE TO CONTINUE---");
+    
+    // Check for tool calls in the message
+    if ("tool_calls" in lastMessage && Array.isArray(lastMessage.tool_calls) && lastMessage.tool_calls.length > 0) {
+      console.log("---DECISION: USE TOOLS---");
       return "tools";
     }
+    
+    console.log("---DECISION: END---");
     return END;
   }
 
@@ -854,7 +881,7 @@ Always use the available tools to gather information and perform analysis before
    */
   private createAgent() {
     const workflow = new StateGraph(MessagesAnnotation)
-      .addNode("agent", this.llmCall.bind(this))
+      .addNode("agent", this.agentNode.bind(this))
       .addNode("tools", this.toolNode)
       .addEdge(START, "agent")
       .addConditionalEdges("agent", this.shouldContinue.bind(this))
@@ -928,23 +955,22 @@ Always use the available tools to gather information and perform analysis before
 
       // Prepare the matching query
       const matchingQuery = new HumanMessage({
-        content: `Find professional matches for user ${validatedRequest.userId} with the following criteria:
+        content: `Find professional matches for user ${validatedRequest.userId} using these criteria:
 
-Matching Type: ${validatedRequest.matchingType}
-Max Results: ${validatedRequest.maxResults}
-Min Compatibility: ${validatedRequest.minCompatibility}%
-Location Preference: ${validatedRequest.locationPreference}
-Include Profile Intelligence: ${validatedRequest.includeProfileIntelligence}
+- Matching Type: ${validatedRequest.matchingType}
+- Max Results: ${validatedRequest.maxResults}
+- Min Compatibility: ${validatedRequest.minCompatibility}%
+- Location Preference: ${validatedRequest.locationPreference}
 
-Please use the available tools to:
-1. Get the user's detailed profile
-2. Search for semantically similar professionals using vector search
-3. Analyze compatibility for potential matches
-4. Return ranked matches with detailed reasoning
+STEP-BY-STEP INSTRUCTIONS:
+1. Call get_user_profile(userId: "${validatedRequest.userId}") to get the requesting user's details
+2. Call vector_search_profiles with a query based on their skills and interests
+3. Review the vector search results - if users are found, create matches using their user IDs
+4. Return JSON array with real user IDs from vector search results
 
-Focus on finding high-quality matches that align with the user's ${validatedRequest.matchingType} networking goals.
+IMPORTANT: If vector search finds users (like in the examples showing 15 profiles found), you MUST create matches from those results. Do NOT return an empty array when real users are available!
 
-IMPORTANT: When you finish your analysis, return ONLY a valid JSON array with no additional text, explanations, or formatting. Just the pure JSON array as specified in the system prompt.`,
+Create meaningful matches based on the actual tool results!`,
       });
 
       // Execute the agent
@@ -954,7 +980,31 @@ IMPORTANT: When you finish your analysis, return ONLY a valid JSON array with no
 
       // Extract matches from the agent response
       const lastMessage = result.messages[result.messages.length - 1];
-      const responseContent = lastMessage.content as string;
+      console.log("🔍 Last message type:", typeof lastMessage.content);
+      console.log("🔍 Last message content:", lastMessage.content);
+      
+      // Handle different content types
+      let responseContent: string;
+      if (typeof lastMessage.content === 'string') {
+        responseContent = lastMessage.content;
+      } else if (Array.isArray(lastMessage.content)) {
+        // Handle array of content blocks
+        responseContent = lastMessage.content
+          .map(block => {
+            if (typeof block === 'string') return block;
+            if (typeof block === 'object' && block !== null) {
+              // Handle different block types
+              if ('text' in block) return block.text;
+              if ('content' in block) return String(block.content);
+              return JSON.stringify(block);
+            }
+            return String(block);
+          })
+          .join('\n');
+      } else {
+        // Convert to string as fallback
+        responseContent = String(lastMessage.content);
+      }
 
       // Parse the agent's response to extract AI analysis
       const aiAnalysis = this.parseMatchingResponse(responseContent);
@@ -999,15 +1049,24 @@ IMPORTANT: When you finish your analysis, return ONLY a valid JSON array with no
   /**
    * Parse the agent's response to extract structured matches
    */
-  private parseMatchingResponse(response: string): EnhancedMatch[] {
+  private parseMatchingResponse(response: string | any): any[] {
     try {
-      console.log("🔍 Raw agent response:", response.substring(0, 500) + "...");
+      // Ensure response is a string
+      const responseStr = typeof response === 'string' ? response : String(response);
+      
+      console.log("🔍 Raw agent response:", responseStr.substring(0, 2000) + (responseStr.length > 2000 ? "..." : ""));
 
       // First try to parse the entire response as JSON
       try {
-        return JSON.parse(response);
+        const parsed = JSON.parse(responseStr);
+        if (Array.isArray(parsed)) {
+          console.log("✅ Successfully parsed full response as JSON array:", parsed.length);
+          return parsed;
+        } else {
+          console.log("⚠️ Parsed response is not an array:", typeof parsed);
+        }
       } catch (e) {
-        // If that fails, try to extract JSON array from the response
+        console.log("❌ Failed to parse full response as JSON:", e instanceof Error ? e.message : String(e));
       }
 
       // Try to extract JSON array with more flexible patterns
@@ -1019,70 +1078,91 @@ IMPORTANT: When you finish your analysis, return ONLY a valid JSON array with no
       ];
 
       for (const pattern of patterns) {
-        const matches = [...response.matchAll(pattern)];
+        const matches = [...responseStr.matchAll(pattern)];
         for (const match of matches) {
           try {
             const jsonStr = match[1] || match[0];
+            console.log("🔍 Trying to parse extracted JSON:", jsonStr.substring(0, 1000) + (jsonStr.length > 1000 ? "..." : ""));
             const parsed = JSON.parse(jsonStr);
-            if (Array.isArray(parsed)) {
-              console.log("✅ Successfully parsed matches:", parsed.length);
-              return parsed;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              console.log("✅ Successfully parsed matches from pattern:", parsed.length);
+              // Validate that items have user_id
+              const hasUserIds = parsed.some(item => item && typeof item === 'object' && item.user_id);
+              if (hasUserIds) {
+                console.log("✅ Parsed items contain user_id fields");
+                return parsed;
+              } else {
+                console.log("⚠️ Parsed items missing user_id fields:", parsed[0]);
+              }
             }
           } catch (e) {
+            console.log("❌ Failed to parse pattern match:", e instanceof Error ? e.message : String(e));
             continue;
           }
         }
       }
 
       // Try to clean up the response and parse again
-      let cleanResponse = response
+      let cleanResponse = responseStr
         .replace(/```json/g, "")
         .replace(/```/g, "")
         .replace(/^[^[\{]*/, "") // Remove text before JSON
         .replace(/[^}\]]*$/, ""); // Remove text after JSON
 
+      console.log("🔍 Trying cleaned response:", cleanResponse.substring(0, 1000) + (cleanResponse.length > 1000 ? "..." : ""));
+
       try {
         const parsed = JSON.parse(cleanResponse);
-        if (Array.isArray(parsed)) {
-          console.log(
-            "✅ Successfully parsed cleaned response:",
-            parsed.length
-          );
-          return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          console.log("✅ Successfully parsed cleaned response:", parsed.length);
+          // Validate that items have user_id
+          const hasUserIds = parsed.some(item => item && typeof item === 'object' && item.user_id);
+          if (hasUserIds) {
+            console.log("✅ Cleaned items contain user_id fields");
+            return parsed;
+          } else {
+            console.log("⚠️ Cleaned items missing user_id fields:", JSON.stringify(parsed[0], null, 2));
+          }
         }
       } catch (e) {
-        // Still failed
+        console.log("❌ Failed to parse cleaned response:", e instanceof Error ? e.message : String(e));
       }
 
       // If all else fails, try to extract individual match objects
+      console.log("🔍 Trying to extract individual match objects...");
       const objectMatches = [
-        ...response.matchAll(/\{[^{}]*"compatibilityScore"[^{}]*\}/g),
+        ...responseStr.matchAll(/\{[^{}]*"user_id"[^{}]*\}/g),
       ];
+      
       if (objectMatches.length > 0) {
+        console.log(`🔍 Found ${objectMatches.length} potential match objects`);
         const extractedMatches = [];
         for (const objMatch of objectMatches) {
           try {
+            console.log("🔍 Trying to parse object:", objMatch[0].substring(0, 100) + "...");
             const parsed = JSON.parse(objMatch[0]);
-            extractedMatches.push(parsed);
+            if (parsed.user_id) {
+              extractedMatches.push(parsed);
+              console.log("✅ Successfully parsed match object with user_id:", parsed.user_id);
+            }
           } catch (e) {
+            console.log("❌ Failed to parse object:", e instanceof Error ? e.message : String(e));
             continue;
           }
         }
         if (extractedMatches.length > 0) {
-          console.log(
-            "✅ Extracted individual matches:",
-            extractedMatches.length
-          );
+          console.log("✅ Extracted individual matches:", extractedMatches.length);
           return extractedMatches;
         }
       }
 
-      console.warn("⚠️ Could not parse matches from agent response");
-      console.log("Response sample:", response.substring(0, 1000));
+      console.warn("⚠️ Could not parse any valid matches from agent response");
+      console.log("Full response for debugging:", responseStr);
       return [];
     } catch (error) {
       console.error("❌ Error parsing matching response:", error);
-      console.log("Response that failed:", response.substring(0, 500));
+      const responseStr = typeof response === 'string' ? response : String(response);
+      console.log("Response that failed parsing:", responseStr.substring(0, 2000) + (responseStr.length > 2000 ? "..." : ""));
       return [];
     }
   }

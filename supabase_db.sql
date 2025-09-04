@@ -433,9 +433,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Function for LangChain vector similarity search
 CREATE OR REPLACE FUNCTION public.match_documents (
   query_embedding VECTOR(768),
-  match_count INT DEFAULT NULL,
-  filter JSONB DEFAULT '{}',
-  user_id_filter UUID DEFAULT NULL
+  match_count INT DEFAULT 20,
+  filter JSONB DEFAULT '{}'
 ) RETURNS TABLE (
   id BIGINT,
   user_id UUID,
@@ -456,7 +455,6 @@ BEGIN
     1 - (documents.embedding <=> query_embedding) AS similarity
   FROM documents
   WHERE metadata @> filter
-    AND (user_id_filter IS NULL OR documents.user_id = user_id_filter)
   ORDER BY documents.embedding <=> query_embedding
   LIMIT match_count;
 END;
