@@ -61,11 +61,8 @@ export async function POST(request: NextRequest) {
     // Prepare matching request
     const matchingRequest: MatchingRequest = {
       userId: user.id,
-      matchingType,
       maxResults: Math.min(maxResults, 50), // Cap at 50
       minCompatibility: Math.max(minCompatibility, 10), // Minimum 10%
-      locationPreference,
-      includeProfileIntelligence,
     };
 
     console.log(`🚀 Executing RAG matching with parameters:`, matchingRequest);
@@ -179,11 +176,8 @@ export async function GET(request: NextRequest) {
     // Get matches for specific type
     const result = await matchingAgent.findMatches({
       userId: user.id,
-      matchingType: matchingType as any,
       maxResults: limit,
       minCompatibility: 40,
-      locationPreference: "global",
-      includeProfileIntelligence: true,
     });
 
     if (!result.success) {

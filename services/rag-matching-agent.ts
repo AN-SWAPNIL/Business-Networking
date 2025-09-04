@@ -28,6 +28,7 @@ interface MatchingUser {
   company: string;
   location: string;
   bio?: string;
+  avatar?: string;
   skills: string[];
   interests: string[];
   preferences: {
@@ -54,26 +55,15 @@ interface EnhancedMatch {
   semanticSimilarity: number;
   aiReasoning: string;
   matchingCategory: string;
+  matchTypes: string[]; // AI-determined match types (e.g., ["Mentor", "Collaborator"])
   recommendationStrength: "high" | "medium" | "low";
 }
 
 // Matching Request Schema
 const MatchingRequestSchema = z.object({
   userId: z.string(),
-  matchingType: z.enum([
-    "mentorship",
-    "collaboration",
-    "investment",
-    "hiring",
-    "discussion",
-    "all",
-  ]),
   maxResults: z.number().min(1).max(50).default(10),
-  minCompatibility: z.number().min(0).max(100).default(40),
-  locationPreference: z
-    .enum(["local", "regional", "national", "global"])
-    .default("global"),
-  includeProfileIntelligence: z.boolean().default(true),
+  minCompatibility: z.number().min(10).max(100).default(40),
 });
 
 type MatchingRequest = z.infer<typeof MatchingRequestSchema>;
@@ -129,6 +119,7 @@ export class RAGMatchingAgent {
     this.tools = [
       this.createVectorSearchTool(),
       this.createUserProfileTool(),
+      this.createUserVectorContentTool(),
       this.createCompatibilityAnalysisTool(),
     ];
 
@@ -356,7 +347,10 @@ export class RAGMatchingAgent {
               profileContent: doc.pageContent.substring(0, 500),
             }));
 
-          console.log(`🔍 Vector search formatted results:`, JSON.stringify(formattedResults.slice(0, 2), null, 2));
+          console.log(
+            `🔍 Vector search formatted results:`,
+            JSON.stringify(formattedResults.slice(0, 2), null, 2)
+          );
 
           return {
             success: true,
@@ -375,23 +369,35 @@ export class RAGMatchingAgent {
       },
       {
         name: "vector_search_profiles",
-        description: `Search for similar user profiles using vector similarity. This tool finds real users from the database based on semantic similarity. 
+        description: `Search for similar user profiles using vector similarity with SEMANTIC UNDERSTANDING. This tool finds real users based on meaning, context, and professional synergy - not just exact keyword matches.
 
-USAGE EXAMPLES:
-- query: "software engineer AI machine learning startup" (combines skills and interests)
-- query: "fintech blockchain cryptocurrency trading" (industry-specific terms)
-- query: "project manager agile scrum team leadership" (role and skills)
-- filters: {excludeUserId: "requesting_user_id", minSimilarity: 0.6}
+🧠 SEMANTIC STRATEGIES: Combine related technologies, conceptual terms, context words, ecosystem terms, locations, roles, and industries.
 
-RETURNS: Real user IDs and profile data from the database. Use these user IDs in subsequent tool calls.`,
+✨ COMPREHENSIVE QUERY EXAMPLES:
+- "software engineer San Francisco startup JavaScript React frontend web development"
+- "data scientist New York fintech machine learning python analytics AI banking"
+- "product manager London healthcare startup user experience design strategy"
+- "DevOps engineer Berlin cloud infrastructure automation AWS docker kubernetes"
+
+🎯 INCLUDE IN QUERIES: Skills + Location + Industry/Company type + Role for best semantic matching.
+
+RETURNS: Real user profiles with semantic similarity scores including location, title, company context.`,
         schema: z.object({
           query: z
             .string()
-            .describe("Search query combining skills, interests, industry terms, and roles"),
+            .describe(
+              "Comprehensive search query combining skills, interests, location, title/role, industry, and company context for semantic matching"
+            ),
           filters: z
             .object({
-              excludeUserId: z.string().optional().describe("User ID to exclude from results"),
-              minSimilarity: z.number().optional().describe("Minimum similarity score (0-1)"),
+              excludeUserId: z
+                .string()
+                .optional()
+                .describe("User ID to exclude from results"),
+              minSimilarity: z
+                .number()
+                .optional()
+                .describe("Minimum similarity score (0-1)"),
               location: z.string().optional().describe("Location filter"),
             })
             .optional(),
@@ -536,7 +542,150 @@ RETURNS: Real user IDs and profile data from the database. Use these user IDs in
 
 RETURNS: Real user data including skills, interests, preferences, company, location, etc.`,
         schema: z.object({
-          userId: z.string().describe("Real user ID from database (never create fake IDs)"),
+          userId: z
+            .string()
+            .describe("Real user ID from database (never create fake IDs)"),
+        }),
+      }
+    );
+  }
+
+  /**
+   * User Vector Content Tool - Get comprehensive profile intelligence and vector embeddings
+   */
+  private createUserVectorContentTool() {
+    return tool(
+      async ({ userId }) => {
+        try {
+          console.log(`🔍 Fetching vector content for user: ${userId}`);
+
+          // Get all documents for this user (including profile intelligence)
+          const { data: documents, error: docError } = await this.supabaseClient
+            .from("documents")
+            .select("*")
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false });
+
+          if (docError) {
+            console.error("Error fetching user documents:", docError);
+            return {
+              success: false,
+              error: "Failed to fetch user documents",
+            };
+          }
+
+          if (!documents || documents.length === 0) {
+            console.log(
+              `⚠️ No vector documents found for user ${userId}, falling back to user profile`
+            );
+
+            // Fallback to user profile when no vector content exists
+            try {
+              const { data: user, error: userError } = await this.supabaseClient
+                .from("users")
+                .select("*")
+                .eq("id", userId)
+                .single();
+
+              if (userError || !user) {
+                return {
+                  success: false,
+                  error:
+                    "No vector content found and user profile fetch failed",
+                };
+              }
+
+              // Return just content as fallback (user profile doesn't have rich content)
+              return {
+                success: true,
+                content: `Name: ${user.name || "Unknown"}
+Title: ${user.title || "Professional"}
+Company: ${user.company || ""}
+Location: ${user.location || ""}
+Bio: ${user.bio || "Not specified"}
+Email: ${user.email || ""}
+Phone: ${user.phone || ""}
+Website: ${user.website || ""}
+Skills: ${(user.skills || []).join(", ")}
+Interests: ${(user.interests || []).join(", ")}
+Preferences: ${Object.entries(user.preferences || {})
+                  .filter(([_, value]) => value)
+                  .map(([key, _]) => key)
+                  .join(", ")}
+Avatar: ${user.avatar_url || ""}
+Connections: ${user.stats?.connections || 0}
+Collaborations: ${user.stats?.collaborations || 0}
+Mentorships: ${user.stats?.mentorships || 0}
+Investments: ${user.stats?.investments || 0}
+Discussions: ${user.stats?.discussions || 0}
+Joined: ${
+                  user.created_at
+                    ? new Date(user.created_at).toLocaleDateString()
+                    : "Recently"
+                }`,
+                totalDocuments: 0,
+                hasProfileIntelligence: false,
+                fallbackUsed: true,
+                fallbackSource: "user_profile",
+              };
+            } catch (fallbackError) {
+              return {
+                success: false,
+                error: "Both vector content and user profile fetch failed",
+              };
+            }
+          }
+
+          console.log(
+            `✅ Found ${documents.length} documents for user ${userId}`
+          );
+
+          // Parse and organize the documents
+          const profileIntelligence = documents.find(
+            (doc: any) =>
+              doc.metadata?.type === "profile_intelligence" ||
+              doc.content?.includes("Professional Summary:")
+          );
+
+          const semanticProfile = documents.find(
+            (doc: any) =>
+              doc.metadata?.semantic_tags &&
+              Array.isArray(doc.metadata.semantic_tags)
+          );
+
+          // Return only the content directly
+          return {
+            success: true,
+            content: profileIntelligence?.content || null,
+            totalDocuments: documents.length,
+            hasProfileIntelligence: !!profileIntelligence,
+          };
+        } catch (error) {
+          console.error("Error in vector content tool:", error);
+          return {
+            success: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Vector content fetch failed",
+          };
+        }
+      },
+      {
+        name: "get_user_vector_content",
+        description: `Get complete profile intelligence content for the REQUESTING USER ONLY. 
+
+🎯 RETURNS: Full profile intelligence content with professional summary, analysis, and insights.
+
+🚨 USE ONLY for requesting user. For finding others, use vector_search_profiles + get_user_profile.
+
+✅ Auto-fallback to user profile data if no vector content exists.`,
+        schema: z.object({
+          userId: z
+            .string()
+            .describe(
+              "User ID to get complete vector content and profile intelligence for"
+            ),
         }),
       }
     );
@@ -550,7 +699,7 @@ RETURNS: Real user data including skills, interests, preferences, company, locat
       async ({ currentUser, targetUser, matchingType }) => {
         try {
           const analysisPrompt = `
-Analyze the compatibility between these two professionals for ${matchingType} purposes:
+Analyze the compatibility between these two professionals for ${matchingType} purposes, considering ALL FACTORS:
 
 CURRENT USER:
 Name: ${currentUser.name}
@@ -576,13 +725,43 @@ Preferences: ${Object.entries(targetUser.preferences)
             .map(([key, _]) => key)
             .join(", ")}
 
+🎯 COMPREHENSIVE COMPATIBILITY ANALYSIS - Consider ALL factors:
+
+1. SKILLS & INTERESTS (40% weight): Technical/domain overlap and complementarity
+2. LOCATION (25% weight): Geographic proximity for collaboration, meetings, events
+3. TITLE/ROLE (20% weight): Similar roles = peer networking, different = mentoring/learning
+4. COMPANY/INDUSTRY (15% weight): Same industry = context, different = fresh perspectives
+
+SCORING GUIDELINES:
+- Same location + skill overlap = 80-95%
+- Same location + complementary skills = 70-85%
+- Different location + strong skill overlap = 65-80%
+- Same industry + location proximity = 70-85%
+- Cross-industry + skill complementarity = 60-75%
+- Different location + different skills but same interests = 45-60%
+
+🎯 MATCH TYPE ANALYSIS - Determine the relationship types based on professional context:
+
+AVAILABLE MATCH TYPES:
+- "Mentor" (experienced professional who can guide the user)
+- "Mentee" (someone the user can mentor/guide)
+- "Collaborator" (peer for joint projects/partnerships)
+- "Investor" (potential funding source for user's ventures)
+- "Investment Opportunity" (user could invest in their ventures)
+- "Hiring Manager" (could hire the user)
+- "Potential Hire" (user could hire them)
+- "Discussion Partner" (intellectual peer for professional discussions)
+- "Professional" (general networking contact)
+
 Provide a detailed compatibility analysis with:
-1. Compatibility score (0-100)
-2. Match reasons (specific, actionable reasons)
+1. Compatibility score (0-100) considering ALL factors above
+2. Match reasons (specific, mentioning location, skills, roles, industry)
 3. Shared interests
 4. Complementary skills
-5. AI reasoning (2-3 sentences explaining the match quality)
-6. Recommendation strength (high/medium/low)
+5. Location/collaboration benefits
+6. Match types (array of 1-3 most relevant types, ordered by relevance)
+7. AI reasoning (2-3 sentences explaining the match quality with location/role/company context)
+8. Recommendation strength (high/medium/low)
 
 Return as JSON format.`;
 
@@ -609,6 +788,7 @@ Return as JSON format.`;
               matchReasons: ["Professional networking opportunity"],
               sharedInterests: [],
               complementarySkills: [],
+              matchTypes: ["Professional"],
               aiReasoning: "Basic professional compatibility detected.",
               recommendationStrength: "medium",
             },
@@ -623,7 +803,7 @@ Return as JSON format.`;
       {
         name: "analyze_compatibility",
         description:
-          "Analyze compatibility between two users using AI reasoning",
+          "Analyze comprehensive compatibility between two users using AI reasoning, considering skills, interests, location proximity, title/role synergy, and company/industry context",
         schema: z.object({
           currentUser: z.object({
             name: z.string(),
@@ -654,57 +834,91 @@ Return as JSON format.`;
    */
   private getSystemPrompt(): SystemMessage {
     return new SystemMessage({
-      content: `You are an intelligent professional networking matching agent. You have access to tools that provide real data from the database. You MUST use these tools and then analyze the results to create matches.
+      content: `You are an intelligent professional networking matching agent specializing in SEMANTIC SIMILARITY and creating MULTIPLE meaningful matches. When vector search finds profiles, you should analyze most of them and return several matches, not just the top one.
 
-� CRITICAL WORKFLOW - FOLLOW EXACTLY:
+🔄 CRITICAL WORKFLOW - FOLLOW EXACTLY:
 
-1. FIRST: Call get_user_profile(userId: "requesting_user_id") to understand who is requesting matches
-2. SECOND: Call vector_search_profiles with a query based on the user's skills/interests  
-3. THIRD: Analyze the vector search results and select the best candidates
-4. FOURTH: Return a JSON array with real user IDs from the vector search results
+1. FIRST: Call get_user_vector_content(userId: "requesting_user_id") to get COMPLETE context for the REQUESTING USER ONLY (includes profile intelligence, web research, semantic tags)
+2. SECOND: Call vector_search_profiles with COMPREHENSIVE SEMANTIC query based on requesting user's complete information
+3. THIRD: Use vector_search_profiles multiple times as needed to find diverse matches with different semantic queries
+4. FOURTH: Optionally call get_user_profile for specific users found via vector search if you need additional details
+5. FIFTH: Analyze ALL vector search results and return ALL users with compatibility score ≥40%
+6. SIXTH: If fewer than 10 users meet the ≥40% threshold, also include users with <40% compatibility to reach approximately 10 matches
 
-🎯 EXAMPLE WORKFLOW:
+🎯 TOOL USAGE STRATEGY:
+- get_user_vector_content: ONLY for requesting user (rich context with intelligence)
+- vector_search_profiles: PRIMARY tool for finding matches (use multiple times with different queries)
+- get_user_profile: Optional for additional details on specific found users (usually not needed)
 
-When you get vector search results like:
-[{userId: "63b42074-e408-4362-a874-035ea22da5f1", name: "Ahmmad Nur Swapnil", skills: ["JavaScript", "Node.js"], ...}]
+🧠 SEMANTIC MATCHING PHILOSOPHY:
+- "JavaScript" and "React" are part of the same ecosystem
+- "DevOps" connects to "Infrastructure", "Cloud", "Automation"
+- "Data Science" relates to "Machine Learning", "Analytics", "AI"
+- "Fintech" aligns with "Banking", "Payments", "Investment"
+- Different experience levels create mentoring opportunities
+- LOCATION matters: Same city/region increases collaboration potential
+- TITLE/ROLE matters: Similar roles share challenges, different roles offer perspective
+- COMPANY/INDUSTRY matters: Same industry understands context, different industries bring fresh ideas
 
-You MUST return matches using those EXACT user IDs:
+🎯 COMPATIBILITY SCORING STRATEGY:
+Return ALL users based on compatibility score thresholds - consider SKILLS, INTERESTS, LOCATION, TITLE, and COMPANY:
+- High compatibility (80-95%): Direct skill/interest overlap + location/industry synergy - ALWAYS include
+- Medium compatibility (60-79%): Complementary skills + same location OR same industry - ALWAYS include  
+- Acceptable compatibility (40-59%): Professional growth opportunities + geographic feasibility - ALWAYS include
+- Lower compatibility (25-39%): Include ONLY if needed to reach ~10 total matches
+
+🎯 MATCHING FACTORS TO CONSIDER:
+1. SKILLS & INTERESTS: Primary semantic similarity (technical ecosystems, domains)
+2. LOCATION: Same city/region = higher score, especially for collaboration/mentorship
+3. TITLE/ROLE: Similar roles = peer networking, different roles = diverse perspectives
+4. COMPANY/INDUSTRY: Same industry = context understanding, different = cross-pollination
+5. CAREER LEVEL: Different levels = mentoring opportunities, same level = peer collaboration
+6. MATCH TYPES: AI-determined relationship types based on professional context
+
+🎯 MATCH TYPE ANALYSIS - Include for each match:
+Determine 1-3 most relevant match types based on experience levels, skills, and professional context:
+- "Mentor" (they can guide the requesting user)
+- "Mentee" (requesting user can guide them)
+- "Collaborator" (peer-level partnership potential)
+- "Investor" (potential funding source)
+- "Investment Opportunity" (investment target for user)
+- "Hiring Manager" (could hire the user)
+- "Potential Hire" (user could hire them)
+- "Discussion Partner" (intellectual peer)
+- "Professional" (general networking)
+
+🚨 SCORING RULES:
+1. Return ALL users with compatibility ≥40%
+2. If total count < 10, include users with <40% compatibility to reach approximately 10 matches
+3. Focus on quality over quantity - don't force exact numbers
+
+EXAMPLE OUTPUT: If you find vector results with different skills/interests, return matches for MOST of them with compatibility scores 40-95% based on semantic similarity:
+
 [
   {
-    "user_id": "63b42074-e408-4362-a874-035ea22da5f1",
-    "compatibilityScore": 75,
-    "reasoning": "Both have JavaScript skills and share interest in DevOps",
-    "commonInterests": ["DevOps", "JavaScript"],
-    "complementarySkills": ["Node.js", "Data Science"]
+    "user_id": "user1",
+    "compatibilityScore": 90,
+    "reasoning": "Direct JavaScript/React ecosystem match",
+    "commonInterests": ["Web Development"],
+    "complementarySkills": ["React", "Frontend"],
+    "matchTypes": ["Collaborator", "Discussion Partner"]
+  },
+  {
+    "user_id": "user2", 
+    "compatibilityScore": 65,
+    "reasoning": "Complementary technical background",
+    "commonInterests": ["Technology"],
+    "complementarySkills": ["Python", "Data Analysis"],
+    "matchTypes": ["Mentor", "Discussion Partner"]
   }
 ]
 
-🔧 CRITICAL RULES:
-- NEVER return empty array [] unless vector search finds NO users
-- ALWAYS use real user_id values from vector search tool results
-- NEVER create fake UUIDs or placeholder data
-- Base compatibilityScore on actual shared skills/interests from tool data
-- Include specific reasoning based on the actual user profiles
-
-� MATCHING CRITERIA:
-- Skills overlap (JavaScript, Python, etc.)
-- Interest alignment (AI, DevOps, Fintech, etc.) 
-- Complementary experience levels
-- Geographic proximity
-- Professional context (company, industry)
-
-🎯 FINAL OUTPUT FORMAT:
-After using tools and finding users, return this JSON structure with REAL user IDs:
-
-[
-  {
-    "user_id": "real_uuid_from_vector_search",
-    "compatibilityScore": 85,
-    "reasoning": "Specific match reasoning based on tool data",
-    "commonInterests": ["Actual shared interests"],
-    "complementarySkills": ["Actual complementary skills"]
-  }
-]
+🚨 CRITICAL REQUIREMENTS:
+- Return 5-15 matches when vector search finds multiple profiles
+- Use REAL user IDs from vector search results
+- Create different compatibility scores (40-95) based on semantic similarity
+- Focus on MEANING and CONTEXT, not exact keyword matches
+- Include specific reasoning for each match explaining the semantic connection
 
 🚨 REMEMBER: Use the tool results to create meaningful matches. Don't return empty arrays when users are found!`,
     });
@@ -736,7 +950,7 @@ After using tools and finding users, return this JSON structure with REAL user I
 
       console.log(`🔍 Fetching user data for ${userIds.length} users`);
 
-      // Fetch complete user profiles from database
+      // Fetch only required user data from database
       const { data: users, error } = await this.supabaseClient
         .from("users")
         .select(
@@ -751,8 +965,7 @@ After using tools and finding users, return this JSON structure with REAL user I
           preferences,
           skills,
           interests,
-          stats,
-          created_at
+          stats
         `
         )
         .in("id", userIds);
@@ -769,7 +982,7 @@ After using tools and finding users, return this JSON structure with REAL user I
 
       console.log(`✅ Fetched ${users.length} user profiles from database`);
 
-      // Merge AI analysis with database user data
+      // Merge AI analysis with database user data - only return required fields
       const enhancedMatches = aiAnalysis
         .map((analysis) => {
           const user = users.find((u: any) => u.id === analysis.user_id);
@@ -785,10 +998,10 @@ After using tools and finding users, return this JSON structure with REAL user I
               title: user.title || "Professional",
               company: user.company || "Company",
               location: user.location || "Location not specified",
-              bio: user.bio || `${user.title} at ${user.company}`,
-              avatar: user.avatar_url || "/placeholder-user.jpg", // Changed from avatar_url to avatar
-              phone: user.phone || "",
-              website: user.website || "",
+              bio: user.bio,
+              avatar: user.avatar_url || "/placeholder-user.jpg",
+              skills: user.skills || [],
+              interests: user.interests || [],
               preferences: user.preferences || {
                 mentor: false,
                 invest: false,
@@ -796,35 +1009,16 @@ After using tools and finding users, return this JSON structure with REAL user I
                 collaborate: true,
                 hire: false,
               },
-              skills: user.skills || [],
-              interests: user.interests || [],
               connections: user.stats?.connections || 0,
-              collaborations: user.stats?.collaborations || 0,
-              mentorships: user.stats?.mentorships || 0,
-              investments: user.stats?.investments || 0,
-              discussions: user.stats?.discussions || 0,
-              joinedDate: user.created_at
-                ? new Date(user.created_at).toLocaleDateString("en-US", {
-                    month: "long",
-                    year: "numeric",
-                  })
-                : "Recently",
-              isAdmin: user.is_admin || false,
-              settings: user.settings || {},
             },
             compatibilityScore: analysis.compatibilityScore || 75,
-            matchReasons: [analysis.reasoning || "Professional compatibility"], // Changed from reasoning to matchReasons array
-            sharedInterests: analysis.commonInterests || [], // Changed from matchedInterests to sharedInterests
-            complementarySkills: analysis.complementarySkills || [], // Keep complementarySkills as is
-            matchType: "collaboration",
-            confidence: analysis.compatibilityScore || 75,
-            // Add missing fields for EnhancedMatch type
+            matchReasons: [analysis.reasoning || "Professional compatibility"],
+            sharedInterests: analysis.commonInterests || [],
+            complementarySkills: analysis.complementarySkills || [],
             semanticSimilarity: analysis.compatibilityScore / 100 || 0.75,
-            profileStrength: 0.8, // Default value
-            networkRelevance: 0.7, // Default value
-            locationCompatibility: 0.8, // Default value
             aiReasoning: analysis.reasoning || "Professional compatibility",
-            matchingCategory: "collaboration", // Default category
+            matchingCategory: "collaboration",
+            matchTypes: analysis.matchTypes || ["Professional"], // AI-determined match types
             recommendationStrength: (analysis.compatibilityScore >= 80
               ? "high"
               : analysis.compatibilityScore >= 60
@@ -847,15 +1041,15 @@ After using tools and finding users, return this JSON structure with REAL user I
    */
   private async agentNode(state: typeof MessagesAnnotation.State) {
     console.log("---CALL AGENT---");
-    
+
     // Bind tools to the LLM
     const llmWithTools = this.llm.bindTools(this.tools);
-    
+
     const response = await llmWithTools.invoke([
       this.getSystemPrompt(),
       ...state.messages,
     ]);
-    
+
     return { messages: [response] };
   }
 
@@ -865,13 +1059,17 @@ After using tools and finding users, return this JSON structure with REAL user I
   private shouldContinue(state: typeof MessagesAnnotation.State) {
     const lastMessage = state.messages[state.messages.length - 1];
     console.log("---DECIDE TO CONTINUE---");
-    
+
     // Check for tool calls in the message
-    if ("tool_calls" in lastMessage && Array.isArray(lastMessage.tool_calls) && lastMessage.tool_calls.length > 0) {
+    if (
+      "tool_calls" in lastMessage &&
+      Array.isArray(lastMessage.tool_calls) &&
+      lastMessage.tool_calls.length > 0
+    ) {
       console.log("---DECISION: USE TOOLS---");
       return "tools";
     }
-    
+
     console.log("---DECISION: END---");
     return END;
   }
@@ -908,9 +1106,7 @@ After using tools and finding users, return this JSON structure with REAL user I
     const startTime = Date.now();
 
     try {
-      console.log(
-        `🎯 Finding ${request.matchingType} matches for user: ${request.userId}`
-      );
+      console.log(`🎯 Finding matches for user: ${request.userId}`);
 
       // Validate request
       const validatedRequest = MatchingRequestSchema.parse(request);
@@ -953,24 +1149,55 @@ After using tools and finding users, return this JSON structure with REAL user I
       // Create the agent
       const agent = this.createAgent();
 
-      // Prepare the matching query
+      // Prepare the matching query with semantic emphasis and multi-match requirement
       const matchingQuery = new HumanMessage({
-        content: `Find professional matches for user ${validatedRequest.userId} using these criteria:
+        content: `Find MULTIPLE professional matches for user ${validatedRequest.userId} using SEMANTIC SIMILARITY and meaning-based compatibility:
 
-- Matching Type: ${validatedRequest.matchingType}
 - Max Results: ${validatedRequest.maxResults}
 - Min Compatibility: ${validatedRequest.minCompatibility}%
-- Location Preference: ${validatedRequest.locationPreference}
 
-STEP-BY-STEP INSTRUCTIONS:
-1. Call get_user_profile(userId: "${validatedRequest.userId}") to get the requesting user's details
-2. Call vector_search_profiles with a query based on their skills and interests
-3. Review the vector search results - if users are found, create matches using their user IDs
-4. Return JSON array with real user IDs from vector search results
+🚨 COMPATIBILITY SCORING APPROACH: Return ALL users with compatibility ≥40%. If fewer than 10 users meet this threshold, include users with <40% compatibility to reach approximately 10 matches.
 
-IMPORTANT: If vector search finds users (like in the examples showing 15 profiles found), you MUST create matches from those results. Do NOT return an empty array when real users are available!
+🧠 ENHANCED MULTI-MATCH STRATEGY:
+1. Call get_user_vector_content(userId: "${validatedRequest.userId}") to get COMPLETE context for the REQUESTING USER including profile intelligence, web research, and semantic tags
+2. Use vector_search_profiles MULTIPLE TIMES with different comprehensive semantic queries based on requesting user's COMPLETE information:
+   - Query 1: Core skills + location + role (e.g., "JavaScript React frontend developer San Francisco startup")
+   - Query 2: Industry + interests + location (e.g., "fintech payments technology San Francisco innovation")  
+   - Query 3: Company type + domain + title (e.g., "startup founder entrepreneur technology leadership scaling")
+   - Query 4: Location + complementary skills (e.g., "San Francisco UI UX design product management")
+3. Optionally call get_user_profile for specific interesting users found via vector search to get additional details
+4. Analyze ALL vector search results and return users based on COMPREHENSIVE compatibility including:
+   - Skills & interests similarity (primary factor)
+   - Location compatibility (boost score for same region)
+   - Title/role synergy (same level = peers, different = mentoring/learning)
+   - Company/industry context (same = understanding, different = fresh perspective)
+5. Return users with compatibility ≥40%, including location/title/company factors in scoring
 
-Create meaningful matches based on the actual tool results!`,
+🎯 SEARCH STRATEGY: Use vector search as your PRIMARY discovery tool. Call it multiple times with different semantic queries to find diverse, relevant matches. Use the requesting user's complete intelligence to craft smart search queries.
+
+🔧 TOOL USAGE:
+- get_user_vector_content: ONLY for requesting user (rich context)
+- vector_search_profiles: PRIMARY matching tool (use multiple times)  
+- get_user_profile: Optional additional details for found users
+
+🎯 ENHANCED SEMANTIC MATCHING EXAMPLES (Skills + Location + Title + Company):
+- JavaScript developer in San Francisco + React developer in San Francisco = 95% (skills + location match)
+- Marketing manager in London + Product manager in London = 85% (complementary roles + same location)
+- Fintech startup founder + Banking executive = 80% (industry expertise + different perspectives)
+- Data scientist in NYC + AI researcher in NYC = 90% (domain overlap + location synergy)
+- Remote DevOps engineer + Cloud architect = 75% (complementary technical skills)
+- Healthcare startup CEO + Medical device engineer = 70% (industry + role complementarity)
+
+🎯 LOCATION IMPACT ON SCORING:
+- Same city: +10-15 points for collaboration potential
+- Same region/country: +5-10 points for cultural context
+- Remote-friendly roles: Location less critical, focus on skills/interests
+- Different continents: Still valuable for global perspective, -5 points
+
+🎯 EXPECTED OUTPUT:
+Return ALL users with compatibility ≥40%. If this gives fewer than 10 matches, include lower-scored users to reach approximately 10 total matches.
+
+Return JSON array with MULTIPLE user IDs and semantic compatibility analysis!`,
       });
 
       // Execute the agent
@@ -982,25 +1209,25 @@ Create meaningful matches based on the actual tool results!`,
       const lastMessage = result.messages[result.messages.length - 1];
       console.log("🔍 Last message type:", typeof lastMessage.content);
       console.log("🔍 Last message content:", lastMessage.content);
-      
+
       // Handle different content types
       let responseContent: string;
-      if (typeof lastMessage.content === 'string') {
+      if (typeof lastMessage.content === "string") {
         responseContent = lastMessage.content;
       } else if (Array.isArray(lastMessage.content)) {
         // Handle array of content blocks
         responseContent = lastMessage.content
-          .map(block => {
-            if (typeof block === 'string') return block;
-            if (typeof block === 'object' && block !== null) {
+          .map((block) => {
+            if (typeof block === "string") return block;
+            if (typeof block === "object" && block !== null) {
               // Handle different block types
-              if ('text' in block) return block.text;
-              if ('content' in block) return String(block.content);
+              if ("text" in block) return block.text;
+              if ("content" in block) return String(block.content);
               return JSON.stringify(block);
             }
             return String(block);
           })
-          .join('\n');
+          .join("\n");
       } else {
         // Convert to string as fallback
         responseContent = String(lastMessage.content);
@@ -1052,21 +1279,32 @@ Create meaningful matches based on the actual tool results!`,
   private parseMatchingResponse(response: string | any): any[] {
     try {
       // Ensure response is a string
-      const responseStr = typeof response === 'string' ? response : String(response);
-      
-      console.log("🔍 Raw agent response:", responseStr.substring(0, 2000) + (responseStr.length > 2000 ? "..." : ""));
+      const responseStr =
+        typeof response === "string" ? response : String(response);
+
+      console.log(
+        "🔍 Raw agent response:",
+        responseStr.substring(0, 2000) +
+          (responseStr.length > 2000 ? "..." : "")
+      );
 
       // First try to parse the entire response as JSON
       try {
         const parsed = JSON.parse(responseStr);
         if (Array.isArray(parsed)) {
-          console.log("✅ Successfully parsed full response as JSON array:", parsed.length);
+          console.log(
+            "✅ Successfully parsed full response as JSON array:",
+            parsed.length
+          );
           return parsed;
         } else {
           console.log("⚠️ Parsed response is not an array:", typeof parsed);
         }
       } catch (e) {
-        console.log("❌ Failed to parse full response as JSON:", e instanceof Error ? e.message : String(e));
+        console.log(
+          "❌ Failed to parse full response as JSON:",
+          e instanceof Error ? e.message : String(e)
+        );
       }
 
       // Try to extract JSON array with more flexible patterns
@@ -1082,21 +1320,35 @@ Create meaningful matches based on the actual tool results!`,
         for (const match of matches) {
           try {
             const jsonStr = match[1] || match[0];
-            console.log("🔍 Trying to parse extracted JSON:", jsonStr.substring(0, 1000) + (jsonStr.length > 1000 ? "..." : ""));
+            console.log(
+              "🔍 Trying to parse extracted JSON:",
+              jsonStr.substring(0, 1000) + (jsonStr.length > 1000 ? "..." : "")
+            );
             const parsed = JSON.parse(jsonStr);
             if (Array.isArray(parsed) && parsed.length > 0) {
-              console.log("✅ Successfully parsed matches from pattern:", parsed.length);
+              console.log(
+                "✅ Successfully parsed matches from pattern:",
+                parsed.length
+              );
               // Validate that items have user_id
-              const hasUserIds = parsed.some(item => item && typeof item === 'object' && item.user_id);
+              const hasUserIds = parsed.some(
+                (item) => item && typeof item === "object" && item.user_id
+              );
               if (hasUserIds) {
                 console.log("✅ Parsed items contain user_id fields");
                 return parsed;
               } else {
-                console.log("⚠️ Parsed items missing user_id fields:", parsed[0]);
+                console.log(
+                  "⚠️ Parsed items missing user_id fields:",
+                  parsed[0]
+                );
               }
             }
           } catch (e) {
-            console.log("❌ Failed to parse pattern match:", e instanceof Error ? e.message : String(e));
+            console.log(
+              "❌ Failed to parse pattern match:",
+              e instanceof Error ? e.message : String(e)
+            );
             continue;
           }
         }
@@ -1109,23 +1361,38 @@ Create meaningful matches based on the actual tool results!`,
         .replace(/^[^[\{]*/, "") // Remove text before JSON
         .replace(/[^}\]]*$/, ""); // Remove text after JSON
 
-      console.log("🔍 Trying cleaned response:", cleanResponse.substring(0, 1000) + (cleanResponse.length > 1000 ? "..." : ""));
+      console.log(
+        "🔍 Trying cleaned response:",
+        cleanResponse.substring(0, 1000) +
+          (cleanResponse.length > 1000 ? "..." : "")
+      );
 
       try {
         const parsed = JSON.parse(cleanResponse);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          console.log("✅ Successfully parsed cleaned response:", parsed.length);
+          console.log(
+            "✅ Successfully parsed cleaned response:",
+            parsed.length
+          );
           // Validate that items have user_id
-          const hasUserIds = parsed.some(item => item && typeof item === 'object' && item.user_id);
+          const hasUserIds = parsed.some(
+            (item) => item && typeof item === "object" && item.user_id
+          );
           if (hasUserIds) {
             console.log("✅ Cleaned items contain user_id fields");
             return parsed;
           } else {
-            console.log("⚠️ Cleaned items missing user_id fields:", JSON.stringify(parsed[0], null, 2));
+            console.log(
+              "⚠️ Cleaned items missing user_id fields:",
+              JSON.stringify(parsed[0], null, 2)
+            );
           }
         }
       } catch (e) {
-        console.log("❌ Failed to parse cleaned response:", e instanceof Error ? e.message : String(e));
+        console.log(
+          "❌ Failed to parse cleaned response:",
+          e instanceof Error ? e.message : String(e)
+        );
       }
 
       // If all else fails, try to extract individual match objects
@@ -1133,25 +1400,37 @@ Create meaningful matches based on the actual tool results!`,
       const objectMatches = [
         ...responseStr.matchAll(/\{[^{}]*"user_id"[^{}]*\}/g),
       ];
-      
+
       if (objectMatches.length > 0) {
         console.log(`🔍 Found ${objectMatches.length} potential match objects`);
         const extractedMatches = [];
         for (const objMatch of objectMatches) {
           try {
-            console.log("🔍 Trying to parse object:", objMatch[0].substring(0, 100) + "...");
+            console.log(
+              "🔍 Trying to parse object:",
+              objMatch[0].substring(0, 100) + "..."
+            );
             const parsed = JSON.parse(objMatch[0]);
             if (parsed.user_id) {
               extractedMatches.push(parsed);
-              console.log("✅ Successfully parsed match object with user_id:", parsed.user_id);
+              console.log(
+                "✅ Successfully parsed match object with user_id:",
+                parsed.user_id
+              );
             }
           } catch (e) {
-            console.log("❌ Failed to parse object:", e instanceof Error ? e.message : String(e));
+            console.log(
+              "❌ Failed to parse object:",
+              e instanceof Error ? e.message : String(e)
+            );
             continue;
           }
         }
         if (extractedMatches.length > 0) {
-          console.log("✅ Extracted individual matches:", extractedMatches.length);
+          console.log(
+            "✅ Extracted individual matches:",
+            extractedMatches.length
+          );
           return extractedMatches;
         }
       }
@@ -1161,8 +1440,13 @@ Create meaningful matches based on the actual tool results!`,
       return [];
     } catch (error) {
       console.error("❌ Error parsing matching response:", error);
-      const responseStr = typeof response === 'string' ? response : String(response);
-      console.log("Response that failed parsing:", responseStr.substring(0, 2000) + (responseStr.length > 2000 ? "..." : ""));
+      const responseStr =
+        typeof response === "string" ? response : String(response);
+      console.log(
+        "Response that failed parsing:",
+        responseStr.substring(0, 2000) +
+          (responseStr.length > 2000 ? "..." : "")
+      );
       return [];
     }
   }
@@ -1200,42 +1484,19 @@ Create meaningful matches based on the actual tool results!`,
    */
   async getNetworkingRecommendations(userId: string): Promise<{
     success: boolean;
-    recommendations?: {
-      mentorship: EnhancedMatch[];
-      collaboration: EnhancedMatch[];
-      investment: EnhancedMatch[];
-      hiring: EnhancedMatch[];
-      discussion: EnhancedMatch[];
-    };
+    recommendations?: EnhancedMatch[];
     error?: string;
   }> {
     try {
-      const matchingTypes: Array<MatchingRequest["matchingType"]> = [
-        "mentorship",
-        "collaboration",
-        "investment",
-        "hiring",
-        "discussion",
-      ];
-
-      const recommendations: any = {};
-
-      for (const type of matchingTypes) {
-        const result = await this.findMatches({
-          userId,
-          matchingType: type,
-          maxResults: 5,
-          minCompatibility: 50,
-          locationPreference: "global",
-          includeProfileIntelligence: true,
-        });
-
-        recommendations[type] = result.matches || [];
-      }
+      const result = await this.findMatches({
+        userId,
+        maxResults: 15,
+        minCompatibility: 50,
+      });
 
       return {
         success: true,
-        recommendations,
+        recommendations: result.matches || [],
       };
     } catch (error) {
       return {

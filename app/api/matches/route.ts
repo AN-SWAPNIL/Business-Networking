@@ -50,19 +50,11 @@ export async function GET(request: NextRequest) {
       // Use RAG-based matching
       const ragAgent = new RAGMatchingAgent();
 
-      let matchingType: any = "all";
-      if (category !== "all") {
-        matchingType = category;
-      }
-
       const result = await ragAgent.findMatches(
         {
           userId: user.id,
-          matchingType,
           maxResults: limit,
-          minCompatibility: 30,
-          locationPreference: "global",
-          includeProfileIntelligence: true,
+          minCompatibility: 40, // Use schema default
         },
         forceRefresh
       );
@@ -415,11 +407,8 @@ export async function POST(request: NextRequest) {
       for (const category of categories) {
         const result = await ragAgent.findMatches({
           userId: user.id,
-          matchingType: category === "all" ? "collaboration" : category,
           maxResults: 10,
           minCompatibility: preferences.minCompatibility || 40,
-          locationPreference: preferences.locationPreference || "global",
-          includeProfileIntelligence: true,
         });
 
         results.push({

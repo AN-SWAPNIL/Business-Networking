@@ -289,45 +289,49 @@ export function CollaborationMatches() {
     },
   };
 
-  // Filter matches by category with safety checks
+  // Filter matches by category using AI-determined match types
   const getMatchesByCategory = (category: string) => {
     const safeMatches = allMatches.filter(
       (match: any) => match && match.user && typeof match.user === "object"
     );
 
-    switch (category) {
-      case "mentorship":
-        return safeMatches.filter(
-          (match: any) =>
-            (safeCurrentUser.preferences.mentor &&
-              !match.user.preferences?.mentor) ||
-            (!safeCurrentUser.preferences.mentor &&
-              match.user.preferences?.mentor)
-        );
-      case "collaboration":
-        return safeMatches.filter(
-          (match: any) =>
-            safeCurrentUser.preferences.collaborate &&
-            match.user.preferences?.collaborate
-        );
-      case "investment":
-        return safeMatches.filter(
-          (match: any) =>
-            (safeCurrentUser.preferences.invest &&
-              !match.user.preferences?.invest) ||
-            (!safeCurrentUser.preferences.invest &&
-              match.user.preferences?.invest)
-        );
-      case "hiring":
-        return safeMatches.filter(
-          (match: any) =>
-            (safeCurrentUser.preferences.hire &&
-              !match.user.preferences?.hire) ||
-            (!safeCurrentUser.preferences.hire && match.user.preferences?.hire)
-        );
-      default:
-        return safeMatches;
+    if (category === "all") {
+      return safeMatches;
     }
+
+    // Use AI-determined match types instead of manual preference logic
+    return safeMatches.filter((match: any) => {
+      const matchTypes = match.matchTypes || [];
+
+      switch (category) {
+        case "mentorship":
+          return matchTypes.some(
+            (type: string) =>
+              type.toLowerCase().includes("mentor") ||
+              type.toLowerCase().includes("mentee")
+          );
+        case "collaboration":
+          return matchTypes.some(
+            (type: string) =>
+              type.toLowerCase().includes("collaborator") ||
+              type.toLowerCase().includes("discussion partner")
+          );
+        case "investment":
+          return matchTypes.some(
+            (type: string) =>
+              type.toLowerCase().includes("investor") ||
+              type.toLowerCase().includes("investment opportunity")
+          );
+        case "hiring":
+          return matchTypes.some(
+            (type: string) =>
+              type.toLowerCase().includes("hiring manager") ||
+              type.toLowerCase().includes("potential hire")
+          );
+        default:
+          return false;
+      }
+    });
   };
 
   const filteredMatches = getMatchesByCategory(activeTab);
@@ -376,18 +380,7 @@ export function CollaborationMatches() {
               <Users className="w-5 h-5 text-primary" />
               <div>
                 <p className="text-2xl font-bold">
-                  {
-                    allMatches.filter(
-                      (match: any) =>
-                        match &&
-                        match.user &&
-                        match.user.preferences &&
-                        ((safeCurrentUser.preferences.mentor &&
-                          !match.user.preferences.mentor) ||
-                          (!safeCurrentUser.preferences.mentor &&
-                            match.user.preferences.mentor))
-                    ).length
-                  }
+                  {getMatchesByCategory("mentorship").length}
                 </p>
                 <p className="text-sm text-muted-foreground">Mentorship</p>
               </div>
@@ -400,16 +393,7 @@ export function CollaborationMatches() {
               <Handshake className="w-5 h-5 text-accent" />
               <div>
                 <p className="text-2xl font-bold">
-                  {
-                    allMatches.filter(
-                      (match: any) =>
-                        match &&
-                        match.user &&
-                        match.user.preferences &&
-                        safeCurrentUser.preferences.collaborate &&
-                        match.user.preferences.collaborate
-                    ).length
-                  }
+                  {getMatchesByCategory("collaboration").length}
                 </p>
                 <p className="text-sm text-muted-foreground">Collaboration</p>
               </div>
@@ -490,66 +474,16 @@ export function CollaborationMatches() {
             All Matches ({allMatches.length})
           </TabsTrigger>
           <TabsTrigger value="mentorship">
-            Mentorship (
-            {
-              allMatches.filter(
-                (match: any) =>
-                  match &&
-                  match.user &&
-                  match.user.preferences &&
-                  ((safeCurrentUser.preferences.mentor &&
-                    !match.user.preferences.mentor) ||
-                    (!safeCurrentUser.preferences.mentor &&
-                      match.user.preferences.mentor))
-              ).length
-            }
-            )
+            Mentorship ({getMatchesByCategory("mentorship").length})
           </TabsTrigger>
           <TabsTrigger value="collaboration">
-            Collaboration (
-            {
-              allMatches.filter(
-                (match: any) =>
-                  match &&
-                  match.user &&
-                  match.user.preferences &&
-                  safeCurrentUser.preferences.collaborate &&
-                  match.user.preferences.collaborate
-              ).length
-            }
-            )
+            Collaboration ({getMatchesByCategory("collaboration").length})
           </TabsTrigger>
           <TabsTrigger value="investment">
-            Investment (
-            {
-              allMatches.filter(
-                (match: any) =>
-                  match &&
-                  match.user &&
-                  match.user.preferences &&
-                  ((safeCurrentUser.preferences.invest &&
-                    !match.user.preferences.invest) ||
-                    (!safeCurrentUser.preferences.invest &&
-                      match.user.preferences.invest))
-              ).length
-            }
-            )
+            Investment ({getMatchesByCategory("investment").length})
           </TabsTrigger>
           <TabsTrigger value="hiring">
-            Hiring (
-            {
-              allMatches.filter(
-                (match: any) =>
-                  match &&
-                  match.user &&
-                  match.user.preferences &&
-                  ((safeCurrentUser.preferences.hire &&
-                    !match.user.preferences.hire) ||
-                    (!safeCurrentUser.preferences.hire &&
-                      match.user.preferences.hire))
-              ).length
-            }
-            )
+            Hiring ({getMatchesByCategory("hiring").length})
           </TabsTrigger>
         </TabsList>
       </Tabs>
