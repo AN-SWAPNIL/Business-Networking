@@ -913,13 +913,15 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
   }
 ]
 
-🚨 CRITICAL REQUIREMENTS:
+🚨 CRITICAL OUTPUT REQUIREMENTS:
 - Return 5-15 matches when vector search finds multiple profiles
 - Use REAL user IDs from vector search results
 - Create different compatibility scores (40-95) based on semantic similarity
 - Focus on MEANING and CONTEXT, not exact keyword matches
 - Include specific reasoning for each match explaining the semantic connection
 
+🚨 CRITICAL: RESPOND WITH VALID JSON ARRAY ONLY - NO EXPLANATORY TEXT BEFORE OR AFTER THE JSON
+🚨 FORMAT: Return ONLY the JSON array starting with [ and ending with ] - no additional text, explanations, or markdown formatting
 🚨 REMEMBER: Use the tool results to create meaningful matches. Don't return empty arrays when users are found!`,
     });
   }
@@ -940,15 +942,10 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
         .map((match) => match.user_id)
         .filter((id) => id && typeof id === "string");
 
-      console.log(`🔍 AI Analysis user IDs:`, userIds);
-      console.log(`🔍 Full AI Analysis:`, JSON.stringify(aiAnalysis, null, 2));
-
       if (userIds.length === 0) {
         console.log("⚠️  No valid user IDs found in AI analysis");
         return [];
       }
-
-      console.log(`🔍 Fetching user data for ${userIds.length} users`);
 
       // Fetch only required user data from database
       const { data: users, error } = await this.supabaseClient
@@ -979,8 +976,6 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
         console.log("⚠️  No users found in database");
         return [];
       }
-
-      console.log(`✅ Fetched ${users.length} user profiles from database`);
 
       // Merge AI analysis with database user data - only return required fields
       const enhancedMatches = aiAnalysis
@@ -1028,7 +1023,6 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
         })
         .filter((match) => match !== null);
 
-      console.log(`✅ Created ${enhancedMatches.length} enhanced matches`);
       return enhancedMatches as EnhancedMatch[];
     } catch (error) {
       console.error("Error enriching matches with user data:", error);
@@ -1197,7 +1191,8 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
 🎯 EXPECTED OUTPUT:
 Return ALL users with compatibility ≥40%. If this gives fewer than 10 matches, include lower-scored users to reach approximately 10 total matches.
 
-Return JSON array with MULTIPLE user IDs and semantic compatibility analysis!`,
+🚨 CRITICAL: RESPOND WITH VALID JSON ARRAY ONLY - NO EXPLANATORY TEXT
+🚨 FORMAT: Return ONLY the JSON array starting with [ and ending with ] - no additional text, explanations, or markdown formatting`,
       });
 
       // Execute the agent
@@ -1207,8 +1202,6 @@ Return JSON array with MULTIPLE user IDs and semantic compatibility analysis!`,
 
       // Extract matches from the agent response
       const lastMessage = result.messages[result.messages.length - 1];
-      console.log("🔍 Last message type:", typeof lastMessage.content);
-      console.log("🔍 Last message content:", lastMessage.content);
 
       // Handle different content types
       let responseContent: string;
@@ -1282,37 +1275,27 @@ Return JSON array with MULTIPLE user IDs and semantic compatibility analysis!`,
       const responseStr =
         typeof response === "string" ? response : String(response);
 
-      console.log(
-        "🔍 Raw agent response:",
-        responseStr.substring(0, 2000) +
-          (responseStr.length > 2000 ? "..." : "")
-      );
-
       // First try to parse the entire response as JSON
       try {
         const parsed = JSON.parse(responseStr);
-        if (Array.isArray(parsed)) {
-          console.log(
-            "✅ Successfully parsed full response as JSON array:",
-            parsed.length
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const hasUserIds = parsed.some(
+            (item) => item && typeof item === "object" && item.user_id
           );
-          return parsed;
-        } else {
-          console.log("⚠️ Parsed response is not an array:", typeof parsed);
+          if (hasUserIds) {
+            return parsed;
+          }
         }
       } catch (e) {
-        console.log(
-          "❌ Failed to parse full response as JSON:",
-          e instanceof Error ? e.message : String(e)
-        );
+        // Continue to pattern matching
       }
 
-      // Try to extract JSON array with more flexible patterns
+      // Extract JSON from mixed content using improved patterns
       const patterns = [
-        /\[[\s\S]*?\]/g, // Match any array
-        /```json\s*(\[[\s\S]*?\])\s*```/g, // Match code blocks
-        /```\s*(\[[\s\S]*?\])\s*```/g, // Match code blocks without json
-        /"matches":\s*(\[[\s\S]*?\])/g, // Match matches property
+        /\[[\s\S]*?\](?=\s*$|$)/g, // JSON array at end of response
+        /```json\s*(\[[\s\S]*?\])\s*```/g, // JSON in code blocks
+        /```\s*(\[[\s\S]*?\])\s*```/g, // Array in code blocks
+        /\[[\s\S]*?\](?=\s*[^}\]]*$)/g, // JSON array before trailing text
       ];
 
       for (const pattern of patterns) {
@@ -1320,133 +1303,68 @@ Return JSON array with MULTIPLE user IDs and semantic compatibility analysis!`,
         for (const match of matches) {
           try {
             const jsonStr = match[1] || match[0];
-            console.log(
-              "🔍 Trying to parse extracted JSON:",
-              jsonStr.substring(0, 1000) + (jsonStr.length > 1000 ? "..." : "")
-            );
             const parsed = JSON.parse(jsonStr);
             if (Array.isArray(parsed) && parsed.length > 0) {
-              console.log(
-                "✅ Successfully parsed matches from pattern:",
-                parsed.length
-              );
-              // Validate that items have user_id
               const hasUserIds = parsed.some(
                 (item) => item && typeof item === "object" && item.user_id
               );
               if (hasUserIds) {
-                console.log("✅ Parsed items contain user_id fields");
                 return parsed;
-              } else {
-                console.log(
-                  "⚠️ Parsed items missing user_id fields:",
-                  parsed[0]
-                );
               }
             }
           } catch (e) {
-            console.log(
-              "❌ Failed to parse pattern match:",
-              e instanceof Error ? e.message : String(e)
-            );
             continue;
           }
         }
       }
 
-      // Try to clean up the response and parse again
+      // Clean up response by removing explanatory text before/after JSON
       let cleanResponse = responseStr
         .replace(/```json/g, "")
         .replace(/```/g, "")
-        .replace(/^[^[\{]*/, "") // Remove text before JSON
-        .replace(/[^}\]]*$/, ""); // Remove text after JSON
-
-      console.log(
-        "🔍 Trying cleaned response:",
-        cleanResponse.substring(0, 1000) +
-          (cleanResponse.length > 1000 ? "..." : "")
-      );
+        .replace(/^[\s\S]*?(?=\[)/, "") // Remove everything before first [
+        .replace(/\][\s\S]*$/, "]"); // Remove everything after last ]
 
       try {
         const parsed = JSON.parse(cleanResponse);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          console.log(
-            "✅ Successfully parsed cleaned response:",
-            parsed.length
-          );
-          // Validate that items have user_id
           const hasUserIds = parsed.some(
             (item) => item && typeof item === "object" && item.user_id
           );
           if (hasUserIds) {
-            console.log("✅ Cleaned items contain user_id fields");
             return parsed;
-          } else {
-            console.log(
-              "⚠️ Cleaned items missing user_id fields:",
-              JSON.stringify(parsed[0], null, 2)
-            );
           }
         }
       } catch (e) {
-        console.log(
-          "❌ Failed to parse cleaned response:",
-          e instanceof Error ? e.message : String(e)
-        );
+        // Final fallback - extract individual objects
       }
 
-      // If all else fails, try to extract individual match objects
-      console.log("🔍 Trying to extract individual match objects...");
+      // Extract individual match objects as final fallback
       const objectMatches = [
         ...responseStr.matchAll(/\{[^{}]*"user_id"[^{}]*\}/g),
       ];
 
       if (objectMatches.length > 0) {
-        console.log(`🔍 Found ${objectMatches.length} potential match objects`);
         const extractedMatches = [];
         for (const objMatch of objectMatches) {
           try {
-            console.log(
-              "🔍 Trying to parse object:",
-              objMatch[0].substring(0, 100) + "..."
-            );
             const parsed = JSON.parse(objMatch[0]);
             if (parsed.user_id) {
               extractedMatches.push(parsed);
-              console.log(
-                "✅ Successfully parsed match object with user_id:",
-                parsed.user_id
-              );
             }
           } catch (e) {
-            console.log(
-              "❌ Failed to parse object:",
-              e instanceof Error ? e.message : String(e)
-            );
             continue;
           }
         }
         if (extractedMatches.length > 0) {
-          console.log(
-            "✅ Extracted individual matches:",
-            extractedMatches.length
-          );
           return extractedMatches;
         }
       }
 
-      console.warn("⚠️ Could not parse any valid matches from agent response");
-      console.log("Full response for debugging:", responseStr);
+      console.warn("⚠️ Could not parse matches from agent response");
       return [];
     } catch (error) {
       console.error("❌ Error parsing matching response:", error);
-      const responseStr =
-        typeof response === "string" ? response : String(response);
-      console.log(
-        "Response that failed parsing:",
-        responseStr.substring(0, 2000) +
-          (responseStr.length > 2000 ? "..." : "")
-      );
       return [];
     }
   }
