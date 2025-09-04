@@ -92,7 +92,7 @@ export class RAGMatchingAgent {
     this.llm = new ChatGoogleGenerativeAI({
       model: "gemini-1.5-flash",
       apiKey: process.env.GOOGLE_API_KEY,
-      temperature: 0.7, // Lower temperature for more consistent matching
+      temperature: 0.3, // Lower temperature for more consistent matching
       maxOutputTokens: 4096, // Increase max output tokens for longer responses
     });
 
@@ -120,7 +120,6 @@ export class RAGMatchingAgent {
       this.createVectorSearchTool(),
       this.createUserProfileTool(),
       this.createUserVectorContentTool(),
-      this.createCompatibilityAnalysisTool(),
     ];
 
     this.toolNode = new ToolNode(this.tools);
@@ -129,16 +128,74 @@ export class RAGMatchingAgent {
   }
 
   /**
-   * Check if cached matches exist and are valid
+   * Validate user IDs against database to filter out fake/invalid IDs and exclude current user
+   */
+  private async validateUserIds(
+    userIds: string[],
+    excludeUserId?: string
+  ): Promise<string[]> {
+    if (!userIds || userIds.length === 0) {
+      return [];
+    }
+
+    try {
+      console.log(`🔍 Validating ${userIds.length} user IDs against database`);
+
+      const { data: validUsers, error } = await this.supabaseClient
+        .from("users")
+        .select("id")
+        .in("id", userIds);
+
+      if (error) {
+        console.error("❌ Error validating user IDs:", error);
+        return userIds.filter((id) => id !== excludeUserId); // Return all except current user if validation fails
+      }
+
+      const validIds = validUsers?.map((user: any) => user.id) || [];
+
+      // Filter out the current user from valid IDs
+      const filteredIds = excludeUserId
+        ? validIds.filter((id: string) => id !== excludeUserId)
+        : validIds;
+
+      const invalidIds = userIds.filter((id) => !validIds.includes(id));
+      const excludedCount = validIds.length - filteredIds.length;
+
+      if (invalidIds.length > 0) {
+        console.log(
+          `⚠️  Filtered out ${invalidIds.length} invalid user IDs:`,
+          invalidIds
+        );
+      }
+
+      if (excludedCount > 0) {
+        console.log(`🚫 Excluded current user from matches: ${excludeUserId}`);
+      }
+
+      console.log(
+        `✅ Validated ${filteredIds.length} user IDs (excluding current user)`
+      );
+      return filteredIds;
+    } catch (error) {
+      console.error("❌ User ID validation failed:", error);
+      return userIds; // Return all if validation fails
+    }
+  }
+
+  /**
+   * Check if cached AI analysis exists and is valid
+   */
+  /**
+   * Check if cached AI analysis exists and is valid
    */
   private async checkCachedMatches(userId: string): Promise<{
     cached: boolean;
-    matches?: any[];
+    aiAnalysis?: any[];
     cacheAge?: number;
     metadata?: any;
   }> {
     try {
-      console.log(`🔍 Checking cache for user ${userId}`);
+      console.log(`🔍 Checking AI analysis cache for user ${userId}`);
 
       const { data, error } = await this.supabaseClient.rpc(
         "get_cached_matches",
@@ -153,18 +210,18 @@ export class RAGMatchingAgent {
       }
 
       if (!data || data.length === 0) {
-        console.log("📭 No cached matches found");
+        console.log("📭 No cached AI analysis found");
         return { cached: false };
       }
 
       const cacheEntry = data[0];
       console.log(
-        `✅ Found cached matches: ${cacheEntry.total_matches} matches, ${cacheEntry.cache_age_minutes} minutes old`
+        `✅ Found cached AI analysis: ${cacheEntry.total_matches} matches, ${cacheEntry.cache_age_minutes} minutes old`
       );
 
       return {
         cached: true,
-        matches: cacheEntry.matches_data || [],
+        aiAnalysis: cacheEntry.matches_data || [],
         cacheAge: cacheEntry.cache_age_minutes,
         metadata: cacheEntry.cache_metadata,
       };
@@ -175,25 +232,46 @@ export class RAGMatchingAgent {
   }
 
   /**
-   * Store matches in cache
+   * Store AI analysis in cache (without user data enrichment)
    */
-  private async storeCachedMatches(
+  private async storeCachedAIAnalysis(
     userId: string,
-    matches: any[],
+    aiAnalysis: any[],
     processingTime?: number,
     totalProfilesAnalyzed?: number,
     cacheHours: number = 24
   ): Promise<boolean> {
     try {
+      // Validate user IDs before caching (exclude current user from matches)
+      const userIds = aiAnalysis
+        .map((match) => match.user_id)
+        .filter((id) => id && typeof id === "string");
+
+      const validUserIds = await this.validateUserIds(userIds, userId);
+
+      // Filter AI analysis to only include validated user IDs
+      const validAIAnalysis = aiAnalysis.filter((match) =>
+        validUserIds.includes(match.user_id)
+      );
+
+      if (validAIAnalysis.length === 0) {
+        console.log(
+          "⚠️ No valid user IDs found after validation, skipping cache"
+        );
+        return false;
+      }
+
       console.log(
-        `💾 Storing ${matches.length} matches in cache for user ${userId}`
+        `💾 Storing ${validAIAnalysis.length} AI analysis results in cache for user ${userId} (filtered from ${aiAnalysis.length})`
       );
 
       const cacheMetadata = {
         ai_processing_time: processingTime || 0,
         total_profiles_analyzed: totalProfilesAnalyzed || 0,
-        cache_version: "1.0",
+        cache_version: "2.0",
         cached_at: new Date().toISOString(),
+        original_count: aiAnalysis.length,
+        validated_count: validAIAnalysis.length,
       };
 
       const { data, error } = await this.supabaseClient.rpc(
@@ -201,8 +279,8 @@ export class RAGMatchingAgent {
         {
           p_user_id: userId,
           p_matching_type: "all", // Still send but ignored by simplified function
-          p_matches_data: matches,
-          p_total_matches: matches.length,
+          p_matches_data: validAIAnalysis, // Only store AI analysis, not enriched data
+          p_total_matches: validAIAnalysis.length,
           p_cache_metadata: cacheMetadata,
           p_cache_hours: cacheHours,
         }
@@ -213,7 +291,7 @@ export class RAGMatchingAgent {
         return false;
       }
 
-      console.log(`✅ Cached matches stored successfully (ID: ${data})`);
+      console.log(`✅ AI analysis cached successfully (ID: ${data})`);
       return true;
     } catch (error) {
       console.error("❌ Cache storage failed:", error);
@@ -692,144 +770,6 @@ Joined: ${
   }
 
   /**
-   * Compatibility Analysis Tool using AI reasoning
-   */
-  private createCompatibilityAnalysisTool() {
-    return tool(
-      async ({ currentUser, targetUser, matchingType }) => {
-        try {
-          const analysisPrompt = `
-Analyze the compatibility between these two professionals for ${matchingType} purposes, considering ALL FACTORS:
-
-CURRENT USER:
-Name: ${currentUser.name}
-Title: ${currentUser.title}
-Company: ${currentUser.company}
-Location: ${currentUser.location}
-Skills: ${currentUser.skills.join(", ")}
-Interests: ${currentUser.interests.join(", ")}
-Preferences: ${Object.entries(currentUser.preferences)
-            .filter(([_, value]) => value)
-            .map(([key, _]) => key)
-            .join(", ")}
-
-TARGET USER:
-Name: ${targetUser.name}
-Title: ${targetUser.title}
-Company: ${targetUser.company}
-Location: ${targetUser.location}
-Skills: ${targetUser.skills.join(", ")}
-Interests: ${targetUser.interests.join(", ")}
-Preferences: ${Object.entries(targetUser.preferences)
-            .filter(([_, value]) => value)
-            .map(([key, _]) => key)
-            .join(", ")}
-
-🎯 COMPREHENSIVE COMPATIBILITY ANALYSIS - Consider ALL factors:
-
-1. SKILLS & INTERESTS (40% weight): Technical/domain overlap and complementarity
-2. LOCATION (25% weight): Geographic proximity for collaboration, meetings, events
-3. TITLE/ROLE (20% weight): Similar roles = peer networking, different = mentoring/learning
-4. COMPANY/INDUSTRY (15% weight): Same industry = context, different = fresh perspectives
-
-SCORING GUIDELINES:
-- Same location + skill overlap = 80-95%
-- Same location + complementary skills = 70-85%
-- Different location + strong skill overlap = 65-80%
-- Same industry + location proximity = 70-85%
-- Cross-industry + skill complementarity = 60-75%
-- Different location + different skills but same interests = 45-60%
-
-🎯 MATCH TYPE ANALYSIS - Determine the relationship types based on professional context:
-
-AVAILABLE MATCH TYPES:
-- "Mentor" (experienced professional who can guide the user)
-- "Mentee" (someone the user can mentor/guide)
-- "Collaborator" (peer for joint projects/partnerships)
-- "Investor" (potential funding source for user's ventures)
-- "Investment Opportunity" (user could invest in their ventures)
-- "Hiring Manager" (could hire the user)
-- "Potential Hire" (user could hire them)
-- "Discussion Partner" (intellectual peer for professional discussions)
-- "Professional" (general networking contact)
-
-Provide a detailed compatibility analysis with:
-1. Compatibility score (0-100) considering ALL factors above
-2. Match reasons (specific, mentioning location, skills, roles, industry)
-3. Shared interests
-4. Complementary skills
-5. Location/collaboration benefits
-6. Match types (array of 1-3 most relevant types, ordered by relevance)
-7. AI reasoning (2-3 sentences explaining the match quality with location/role/company context)
-8. Recommendation strength (high/medium/low)
-
-Return as JSON format.`;
-
-          const response = await this.llm.invoke([
-            new HumanMessage(analysisPrompt),
-          ]);
-          const content = response.content as string;
-
-          // Extract JSON from response
-          const jsonMatch = content.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const analysis = JSON.parse(jsonMatch[0]);
-            return {
-              success: true,
-              analysis,
-            };
-          }
-
-          // Fallback analysis
-          return {
-            success: true,
-            analysis: {
-              compatibilityScore: 50,
-              matchReasons: ["Professional networking opportunity"],
-              sharedInterests: [],
-              complementarySkills: [],
-              matchTypes: ["Professional"],
-              aiReasoning: "Basic professional compatibility detected.",
-              recommendationStrength: "medium",
-            },
-          };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : "Analysis failed",
-          };
-        }
-      },
-      {
-        name: "analyze_compatibility",
-        description:
-          "Analyze comprehensive compatibility between two users using AI reasoning, considering skills, interests, location proximity, title/role synergy, and company/industry context",
-        schema: z.object({
-          currentUser: z.object({
-            name: z.string(),
-            title: z.string(),
-            company: z.string(),
-            location: z.string(),
-            skills: z.array(z.string()),
-            interests: z.array(z.string()),
-            preferences: z.record(z.boolean()),
-          }),
-          targetUser: z.object({
-            name: z.string(),
-            title: z.string(),
-            company: z.string(),
-            location: z.string(),
-            skills: z.array(z.string()),
-            interests: z.array(z.string()),
-            preferences: z.record(z.boolean()),
-          }),
-          matchingType: z.string(),
-        }),
-      }
-    );
-  }
-
-  /**
    * System prompt for the matching agent
    */
   private getSystemPrompt(): SystemMessage {
@@ -842,8 +782,8 @@ Return as JSON format.`;
 2. SECOND: Call vector_search_profiles with COMPREHENSIVE SEMANTIC query based on requesting user's complete information
 3. THIRD: Use vector_search_profiles multiple times as needed to find diverse matches with different semantic queries
 4. FOURTH: Optionally call get_user_profile for specific users found via vector search if you need additional details
-5. FIFTH: Analyze ALL vector search results and return ALL users with compatibility score ≥40%
-6. SIXTH: If fewer than 10 users meet the ≥40% threshold, also include users with <40% compatibility to reach approximately 10 matches
+5. FIFTH: Analyze ALL vector search results and return users based on the minimum compatibility threshold provided
+6. SIXTH: If fewer users meet the threshold, include lower-scored users to reach the requested number of matches
 
 🎯 TOOL USAGE STRATEGY:
 - get_user_vector_content: ONLY for requesting user (rich context with intelligence)
@@ -856,43 +796,71 @@ Return as JSON format.`;
 - "Data Science" relates to "Machine Learning", "Analytics", "AI"
 - "Fintech" aligns with "Banking", "Payments", "Investment"
 - Different experience levels create mentoring opportunities
+- BUSINESS RELATIONSHIPS: Look for investment opportunities (VCs, angels, entrepreneurs), hiring needs (CTOs, managers, specialists)
+- HIRING OPPORTUNITIES: CTOs/managers seek talent, developers/specialists seek roles, company growth creates hiring needs
+- INVESTMENT CONNECTIONS: Entrepreneurs need funding, VCs/angels provide capital, sector expertise matters
+- PREFERENCES matter: mentor+mentee seeking, invest+funding needs, collaborate+collaborate willingness, discuss+discuss interest, hire+hiring needs
 - LOCATION matters: Same city/region increases collaboration potential
 - TITLE/ROLE matters: Similar roles share challenges, different roles offer perspective
 - COMPANY/INDUSTRY matters: Same industry understands context, different industries bring fresh ideas
 
 🎯 COMPATIBILITY SCORING STRATEGY:
-Return ALL users based on compatibility score thresholds - consider SKILLS, INTERESTS, LOCATION, TITLE, and COMPANY:
-- High compatibility (80-95%): Direct skill/interest overlap + location/industry synergy - ALWAYS include
-- Medium compatibility (60-79%): Complementary skills + same location OR same industry - ALWAYS include  
-- Acceptable compatibility (40-59%): Professional growth opportunities + geographic feasibility - ALWAYS include
-- Lower compatibility (25-39%): Include ONLY if needed to reach ~10 total matches
+Return users based on the provided compatibility threshold - consider SKILLS, INTERESTS, PREFERENCES, LOCATION, TITLE, and COMPANY:
+- High compatibility (80-95%): Direct skill/interest overlap + preference alignment + location/industry synergy
+- Medium compatibility (60-79%): Complementary skills + preference match + same location OR same industry  
+- Acceptable compatibility (40-59%): Professional growth opportunities + some preference overlap + geographic feasibility
+- Lower compatibility (25-39%): Include only if needed to reach the requested number of matches
 
 🎯 MATCHING FACTORS TO CONSIDER:
-1. SKILLS & INTERESTS: Primary semantic similarity (technical ecosystems, domains)
-2. LOCATION: Same city/region = higher score, especially for collaboration/mentorship
-3. TITLE/ROLE: Similar roles = peer networking, different roles = diverse perspectives
-4. COMPANY/INDUSTRY: Same industry = context understanding, different = cross-pollination
-5. CAREER LEVEL: Different levels = mentoring opportunities, same level = peer collaboration
+1. SKILLS & INTERESTS: Technical/domain overlap and complementarity (primary factor)
+2. PREFERENCES: User collaboration preferences alignment (mentor, invest, discuss, collaborate, hire)
+3. LOCATION: Geographic proximity for collaboration, meetings, events
+4. TITLE/ROLE: Similar roles = peer networking, different = mentoring/learning
+5. COMPANY/INDUSTRY: Same industry = context understanding, different = cross-pollination
 6. MATCH TYPES: AI-determined relationship types based on professional context
 
+🎯 COMPATIBILITY ANALYSIS GUIDELINES:
+For each match, analyze compatibility using these weighted factors (adjust weights based on context):
+- SKILLS & INTERESTS: Technical/domain overlap and complementarity
+- PREFERENCES: Alignment of collaboration preferences and professional needs
+- LOCATION: Geographic proximity for collaboration, meetings, events  
+- TITLE/ROLE: Experience levels and role complementarity for mutual benefit
+- COMPANY/INDUSTRY: Industry context and cross-pollination opportunities
+
+COMPATIBILITY SCORING WITH PREFERENCES:
+- Same location + skill overlap + preference alignment = High compatibility (80-95%)
+- Same location + complementary skills + preference match = High compatibility (75-90%)  
+- Different location + strong skill overlap + preference alignment = Medium-High compatibility (70-85%)
+- Same industry + location proximity + some preference overlap = Medium compatibility (65-80%)
+- Cross-industry + skill complementarity + preference alignment = Medium compatibility (65-80%)
+- Preference mismatch but strong skills/location match = Medium compatibility (50-65%)
+- Different location + different skills but same interests + some preferences = Lower compatibility (40-55%)
+
 🎯 MATCH TYPE ANALYSIS - Include for each match:
-Determine 1-3 most relevant match types based on experience levels, skills, and professional context:
-- "Mentor" (they can guide the requesting user)
-- "Mentee" (requesting user can guide them)
-- "Collaborator" (peer-level partnership potential)
-- "Investor" (potential funding source)
-- "Investment Opportunity" (investment target for user)
-- "Hiring Manager" (could hire the user)
-- "Potential Hire" (user could hire them)
-- "Discussion Partner" (intellectual peer)
-- "Professional" (general networking)
+Determine 2-4 most relevant match types based on comprehensive analysis of experience levels, skills, interests, professional context, and needs:
+- "Mentor" (experienced professional who can guide the requesting user based on career level, expertise, and industry knowledge)
+- "Mentee" (someone the requesting user can guide based on their expertise and the target's learning needs)  
+- "Collaborator" (peer-level partnership potential based on complementary skills and shared interests)
+- "Investor" (potential funding source based on investment focus, industry, and business stage alignment)
+- "Investment Opportunity" (promising venture for user's investment based on sector expertise and growth potential)
+- "Hiring Manager" (could potentially hire the user based on company needs and user's skills)
+- "Potential Hire" (candidate the user could potentially hire based on team needs and their qualifications)
+- "Discussion Partner" (intellectual peer for meaningful professional discussions based on shared interests and expertise)
+- "Professional" (valuable networking contact for industry connections and knowledge sharing, only when no other types apply)
+
+🎯 MATCH TYPE DIVERSITY: Ensure variety across all relationship types in your matches:
+- HIRING: Must include either "Hiring Manager" OR "Potential Hire" (never both for same user)
+- INVESTMENT: Must include either "Investor" OR "Investment Opportunity" (never both for same user)  
+- MENTORSHIP: Must include either "Mentor" OR "Mentee" (never both for same user)
+- COLLABORATION: Must include either "Collaborator" OR "Discussion Partner" (can include both)
+🚨 Critical: Final results must represent ALL 4 categories above - ensure diversity across hiring, investment, mentorship, and collaboration relationships.
 
 🚨 SCORING RULES:
-1. Return ALL users with compatibility ≥40%
-2. If total count < 10, include users with <40% compatibility to reach approximately 10 matches
+1. Return users based on the provided minimum compatibility threshold
+2. If user count is below the 50% of the requested maximum, include lower-scored users to reach the target
 3. Focus on quality over quantity - don't force exact numbers
 
-EXAMPLE OUTPUT: If you find vector results with different skills/interests, return matches for MOST of them with compatibility scores 40-95% based on semantic similarity:
+EXAMPLE OUTPUT (json format): Include diverse match types across all categories - collaboration, mentorship, investment, hiring:
 
 [
   {
@@ -901,27 +869,41 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
     "reasoning": "Direct JavaScript/React ecosystem match",
     "commonInterests": ["Web Development"],
     "complementarySkills": ["React", "Frontend"],
-    "matchTypes": ["Collaborator", "Discussion Partner"]
+    "matchTypes": ["Collaborator", "Potential Hire"]
   },
   {
     "user_id": "user2", 
-    "compatibilityScore": 65,
-    "reasoning": "Complementary technical background",
+    "compatibilityScore": 75,
+    "reasoning": "Senior developer who could mentor junior talent",
     "commonInterests": ["Technology"],
     "complementarySkills": ["Python", "Data Analysis"],
     "matchTypes": ["Mentor", "Discussion Partner"]
+  },
+  {
+    "user_id": "user3",
+    "compatibilityScore": 70,
+    "reasoning": "VC focused on fintech startups matching user's sector",
+    "commonInterests": ["Fintech", "Startups"],
+    "complementarySkills": ["Investment", "Strategy"],
+    "matchTypes": ["Investor", "Professional"]
+  },
+  {
+    "user_id": "user4",
+    "compatibilityScore": 65,
+    "reasoning": "CTO at growing company needing user's skills",
+    "commonInterests": ["Technology", "Scaling"],
+    "complementarySkills": ["Leadership", "Team Building"],
+    "matchTypes": ["Hiring Manager", "Professional"]
   }
 ]
 
-🚨 CRITICAL OUTPUT REQUIREMENTS:
-- Return 5-15 matches when vector search finds multiple profiles
+🚨 CRITICAL REQUIREMENTS:
+- Return matches based on the requested number and compatibility threshold
 - Use REAL user IDs from vector search results
-- Create different compatibility scores (40-95) based on semantic similarity
+- Create different compatibility scores based on semantic similarity
 - Focus on MEANING and CONTEXT, not exact keyword matches
 - Include specific reasoning for each match explaining the semantic connection
 
-🚨 CRITICAL: RESPOND WITH VALID JSON ARRAY ONLY - NO EXPLANATORY TEXT BEFORE OR AFTER THE JSON
-🚨 FORMAT: Return ONLY the JSON array starting with [ and ending with ] - no additional text, explanations, or markdown formatting
 🚨 REMEMBER: Use the tool results to create meaningful matches. Don't return empty arrays when users are found!`,
     });
   }
@@ -942,10 +924,15 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
         .map((match) => match.user_id)
         .filter((id) => id && typeof id === "string");
 
+      console.log(`🔍 AI Analysis user IDs:`, userIds);
+      console.log(`🔍 Full AI Analysis:`, JSON.stringify(aiAnalysis, null, 2));
+
       if (userIds.length === 0) {
         console.log("⚠️  No valid user IDs found in AI analysis");
         return [];
       }
+
+      console.log(`🔍 Fetching user data for ${userIds.length} users`);
 
       // Fetch only required user data from database
       const { data: users, error } = await this.supabaseClient
@@ -976,6 +963,8 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
         console.log("⚠️  No users found in database");
         return [];
       }
+
+      console.log(`✅ Fetched ${users.length} user profiles from database`);
 
       // Merge AI analysis with database user data - only return required fields
       const enhancedMatches = aiAnalysis
@@ -1023,6 +1012,7 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
         })
         .filter((match) => match !== null);
 
+      console.log(`✅ Created ${enhancedMatches.length} enhanced matches`);
       return enhancedMatches as EnhancedMatch[];
     } catch (error) {
       console.error("Error enriching matches with user data:", error);
@@ -1105,7 +1095,7 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
       // Validate request
       const validatedRequest = MatchingRequestSchema.parse(request);
 
-      // Check for cached matches first (unless force refresh)
+      // Check for cached AI analysis first (unless force refresh)
       if (!forceRefresh) {
         const cacheResult = await this.checkCachedMatches(
           validatedRequest.userId
@@ -1116,21 +1106,26 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
           const maxCacheAge = 6 * 60; // 6 hours in minutes
           if (cacheResult.cacheAge! < maxCacheAge) {
             console.log(
-              `🚀 Returning cached matches (${cacheResult.cacheAge} minutes old)`
+              `🚀 Using cached AI analysis (${cacheResult.cacheAge} minutes old), enriching with fresh user data`
+            );
+
+            // Always enrich cached AI analysis with fresh user data
+            const enrichedMatches = await this.enrichMatchesWithUserData(
+              cacheResult.aiAnalysis || []
             );
             const processingTime = Date.now() - startTime;
 
             return {
               success: true,
-              matches: cacheResult.matches || [],
-              totalFound: cacheResult.matches?.length || 0,
+              matches: enrichedMatches,
+              totalFound: enrichedMatches.length,
               processingTime,
               cacheUsed: true,
               cacheAge: cacheResult.cacheAge,
             };
           } else {
             console.log(
-              `⏰ Cache expired (${cacheResult.cacheAge} minutes old), generating fresh matches`
+              `⏰ Cache expired (${cacheResult.cacheAge} minutes old), generating fresh AI analysis`
             );
           }
         }
@@ -1150,8 +1145,6 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
 - Max Results: ${validatedRequest.maxResults}
 - Min Compatibility: ${validatedRequest.minCompatibility}%
 
-🚨 COMPATIBILITY SCORING APPROACH: Return ALL users with compatibility ≥40%. If fewer than 10 users meet this threshold, include users with <40% compatibility to reach approximately 10 matches.
-
 🧠 ENHANCED MULTI-MATCH STRATEGY:
 1. Call get_user_vector_content(userId: "${validatedRequest.userId}") to get COMPLETE context for the REQUESTING USER including profile intelligence, web research, and semantic tags
 2. Use vector_search_profiles MULTIPLE TIMES with different comprehensive semantic queries based on requesting user's COMPLETE information:
@@ -1165,14 +1158,41 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
    - Location compatibility (boost score for same region)
    - Title/role synergy (same level = peers, different = mentoring/learning)
    - Company/industry context (same = understanding, different = fresh perspective)
-5. Return users with compatibility ≥40%, including location/title/company factors in scoring
+5. Return users with compatibility ≥${validatedRequest.minCompatibility}%, including location/title/company factors in scoring
 
 🎯 SEARCH STRATEGY: Use vector search as your PRIMARY discovery tool. Call it multiple times with different semantic queries to find diverse, relevant matches. Use the requesting user's complete intelligence to craft smart search queries.
 
 🔧 TOOL USAGE:
 - get_user_vector_content: ONLY for requesting user (rich context)
-- vector_search_profiles: PRIMARY matching tool (use multiple times)  
+- vector_search_profiles: PRIMARY matching tool (use multiple times with filters: {excludeUserId: "${validatedRequest.userId}"})  
 - get_user_profile: Optional additional details for found users
+
+🚨 CRITICAL MATCH TYPE ASSIGNMENT - ASSIGN THESE BUSINESS RELATIONSHIP TYPES:
+
+🔥 HIRING RELATIONSHIPS (MANDATORY):
+- "Hiring Manager": CTOs, Engineering Managers, VPs, Directors, Team Leads, Founders who manage teams
+- "Potential Hire": Junior developers, specialists, engineers when user is in management position
+
+🔥 INVESTMENT RELATIONSHIPS (MANDATORY):
+- "Investor": VCs, Angel Investors, Investment Partners, Startup Advisors with capital
+- "Investment Opportunity": Entrepreneurs, Startup Founders, CEOs seeking funding
+
+🔥 MENTORSHIP RELATIONSHIPS (MANDATORY):
+- "Mentor": Senior professionals with 5+ years more experience than requesting user
+- "Mentee": Junior professionals with less experience than requesting user
+
+🔥 COLLABORATION RELATIONSHIPS (MANDATORY):
+- "Collaborator": Peers with complementary skills at similar levels
+- "Discussion Partner": Professionals with shared interests for knowledge exchange
+
+🚨 ASSIGNMENT RULES - FOLLOW EXACTLY:
+1. IF someone has title "CTO", "Engineering Manager", "Team Lead", "VP", "Director" → ALWAYS include "Hiring Manager"
+2. IF someone has title "Founder", "CEO", "Entrepreneur" → ALWAYS include "Investment Opportunity" 
+3. IF someone has title "VC", "Angel Investor", "Investment Partner" → ALWAYS include "Investor"
+4. IF requesting user is junior/mid-level AND target is senior → ALWAYS include "Mentor" for target
+5. IF requesting user is senior AND target is junior → ALWAYS include "Potential Hire" for target
+6. EVERY match must have at least 2 match types for diversity
+7. 🚨 NEVER use "Professional" - only use specific relationship types above
 
 🎯 ENHANCED SEMANTIC MATCHING EXAMPLES (Skills + Location + Title + Company):
 - JavaScript developer in San Francisco + React developer in San Francisco = 95% (skills + location match)
@@ -1189,10 +1209,11 @@ EXAMPLE OUTPUT: If you find vector results with different skills/interests, retu
 - Different continents: Still valuable for global perspective, -5 points
 
 🎯 EXPECTED OUTPUT:
-Return ALL users with compatibility ≥40%. If this gives fewer than 10 matches, include lower-scored users to reach approximately 10 total matches.
+Return ALL users with compatibility ≥${validatedRequest.minCompatibility}%. If this gives fewer than half of ${validatedRequest.maxResults} matches, include lower-scored users to reach at least half of ${validatedRequest.maxResults} total matches.
 
-🚨 CRITICAL: RESPOND WITH VALID JSON ARRAY ONLY - NO EXPLANATORY TEXT
-🚨 FORMAT: Return ONLY the JSON array starting with [ and ending with ] - no additional text, explanations, or markdown formatting`,
+🚨 ENSURE DIVERSITY: MUST include matches from ALL categories: hiring (Hiring Manager/Potential Hire), investment (Investor/Investment Opportunity), mentorship (Mentor/Mentee), collaboration (Collaborator/Discussion Partner).
+
+Return JSON array with MULTIPLE user IDs and semantic compatibility analysis!`,
       });
 
       // Execute the agent
@@ -1202,6 +1223,8 @@ Return ALL users with compatibility ≥40%. If this gives fewer than 10 matches,
 
       // Extract matches from the agent response
       const lastMessage = result.messages[result.messages.length - 1];
+      console.log("🔍 Last message type:", typeof lastMessage.content);
+      console.log("🔍 Last message content:", lastMessage.content);
 
       // Handle different content types
       let responseContent: string;
@@ -1229,6 +1252,22 @@ Return ALL users with compatibility ≥40%. If this gives fewer than 10 matches,
       // Parse the agent's response to extract AI analysis
       const aiAnalysis = this.parseMatchingResponse(responseContent);
 
+      console.log(
+        `✅ AI analysis completed with ${
+          aiAnalysis.length
+        } potential matches in ${Date.now() - startTime}ms`
+      );
+
+      // Store AI analysis in cache for future requests (don't wait for completion)
+      this.storeCachedAIAnalysis(
+        validatedRequest.userId,
+        aiAnalysis,
+        Date.now() - startTime,
+        aiAnalysis.length
+      ).catch((error: any) => {
+        console.warn("⚠️ Failed to cache AI analysis:", error);
+      });
+
       // Fetch complete user profiles from database
       const enhancedMatches = await this.enrichMatchesWithUserData(aiAnalysis);
 
@@ -1237,16 +1276,6 @@ Return ALL users with compatibility ≥40%. If this gives fewer than 10 matches,
       console.log(
         `✅ Found ${enhancedMatches.length} matches in ${processingTime}ms`
       );
-
-      // Store matches in cache for future requests (don't wait for completion)
-      this.storeCachedMatches(
-        validatedRequest.userId,
-        enhancedMatches,
-        processingTime,
-        enhancedMatches.length
-      ).catch((error) => {
-        console.warn("⚠️ Failed to cache matches:", error);
-      });
 
       return {
         success: true,
@@ -1275,27 +1304,37 @@ Return ALL users with compatibility ≥40%. If this gives fewer than 10 matches,
       const responseStr =
         typeof response === "string" ? response : String(response);
 
+      console.log(
+        "🔍 Raw agent response:",
+        responseStr.substring(0, 2000) +
+          (responseStr.length > 2000 ? "..." : "")
+      );
+
       // First try to parse the entire response as JSON
       try {
         const parsed = JSON.parse(responseStr);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const hasUserIds = parsed.some(
-            (item) => item && typeof item === "object" && item.user_id
+        if (Array.isArray(parsed)) {
+          console.log(
+            "✅ Successfully parsed full response as JSON array:",
+            parsed.length
           );
-          if (hasUserIds) {
-            return parsed;
-          }
+          return parsed;
+        } else {
+          console.log("⚠️ Parsed response is not an array:", typeof parsed);
         }
       } catch (e) {
-        // Continue to pattern matching
+        console.log(
+          "❌ Failed to parse full response as JSON:",
+          e instanceof Error ? e.message : String(e)
+        );
       }
 
-      // Extract JSON from mixed content using improved patterns
+      // Try to extract JSON array with more flexible patterns
       const patterns = [
-        /\[[\s\S]*?\](?=\s*$|$)/g, // JSON array at end of response
-        /```json\s*(\[[\s\S]*?\])\s*```/g, // JSON in code blocks
-        /```\s*(\[[\s\S]*?\])\s*```/g, // Array in code blocks
-        /\[[\s\S]*?\](?=\s*[^}\]]*$)/g, // JSON array before trailing text
+        /\[[\s\S]*?\]/g, // Match any array
+        /```json\s*(\[[\s\S]*?\])\s*```/g, // Match code blocks
+        /```\s*(\[[\s\S]*?\])\s*```/g, // Match code blocks without json
+        /"matches":\s*(\[[\s\S]*?\])/g, // Match matches property
       ];
 
       for (const pattern of patterns) {
@@ -1303,68 +1342,133 @@ Return ALL users with compatibility ≥40%. If this gives fewer than 10 matches,
         for (const match of matches) {
           try {
             const jsonStr = match[1] || match[0];
+            console.log(
+              "🔍 Trying to parse extracted JSON:",
+              jsonStr.substring(0, 1000) + (jsonStr.length > 1000 ? "..." : "")
+            );
             const parsed = JSON.parse(jsonStr);
             if (Array.isArray(parsed) && parsed.length > 0) {
+              console.log(
+                "✅ Successfully parsed matches from pattern:",
+                parsed.length
+              );
+              // Validate that items have user_id
               const hasUserIds = parsed.some(
                 (item) => item && typeof item === "object" && item.user_id
               );
               if (hasUserIds) {
+                console.log("✅ Parsed items contain user_id fields");
                 return parsed;
+              } else {
+                console.log(
+                  "⚠️ Parsed items missing user_id fields:",
+                  parsed[0]
+                );
               }
             }
           } catch (e) {
+            console.log(
+              "❌ Failed to parse pattern match:",
+              e instanceof Error ? e.message : String(e)
+            );
             continue;
           }
         }
       }
 
-      // Clean up response by removing explanatory text before/after JSON
+      // Try to clean up the response and parse again
       let cleanResponse = responseStr
         .replace(/```json/g, "")
         .replace(/```/g, "")
-        .replace(/^[\s\S]*?(?=\[)/, "") // Remove everything before first [
-        .replace(/\][\s\S]*$/, "]"); // Remove everything after last ]
+        .replace(/^[^[\{]*/, "") // Remove text before JSON
+        .replace(/[^}\]]*$/, ""); // Remove text after JSON
+
+      console.log(
+        "🔍 Trying cleaned response:",
+        cleanResponse.substring(0, 1000) +
+          (cleanResponse.length > 1000 ? "..." : "")
+      );
 
       try {
         const parsed = JSON.parse(cleanResponse);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          console.log(
+            "✅ Successfully parsed cleaned response:",
+            parsed.length
+          );
+          // Validate that items have user_id
           const hasUserIds = parsed.some(
             (item) => item && typeof item === "object" && item.user_id
           );
           if (hasUserIds) {
+            console.log("✅ Cleaned items contain user_id fields");
             return parsed;
+          } else {
+            console.log(
+              "⚠️ Cleaned items missing user_id fields:",
+              JSON.stringify(parsed[0], null, 2)
+            );
           }
         }
       } catch (e) {
-        // Final fallback - extract individual objects
+        console.log(
+          "❌ Failed to parse cleaned response:",
+          e instanceof Error ? e.message : String(e)
+        );
       }
 
-      // Extract individual match objects as final fallback
+      // If all else fails, try to extract individual match objects
+      console.log("🔍 Trying to extract individual match objects...");
       const objectMatches = [
         ...responseStr.matchAll(/\{[^{}]*"user_id"[^{}]*\}/g),
       ];
 
       if (objectMatches.length > 0) {
+        console.log(`🔍 Found ${objectMatches.length} potential match objects`);
         const extractedMatches = [];
         for (const objMatch of objectMatches) {
           try {
+            console.log(
+              "🔍 Trying to parse object:",
+              objMatch[0].substring(0, 100) + "..."
+            );
             const parsed = JSON.parse(objMatch[0]);
             if (parsed.user_id) {
               extractedMatches.push(parsed);
+              console.log(
+                "✅ Successfully parsed match object with user_id:",
+                parsed.user_id
+              );
             }
           } catch (e) {
+            console.log(
+              "❌ Failed to parse object:",
+              e instanceof Error ? e.message : String(e)
+            );
             continue;
           }
         }
         if (extractedMatches.length > 0) {
+          console.log(
+            "✅ Extracted individual matches:",
+            extractedMatches.length
+          );
           return extractedMatches;
         }
       }
 
-      console.warn("⚠️ Could not parse matches from agent response");
+      console.warn("⚠️ Could not parse any valid matches from agent response");
+      console.log("Full response for debugging:", responseStr);
       return [];
     } catch (error) {
       console.error("❌ Error parsing matching response:", error);
+      const responseStr =
+        typeof response === "string" ? response : String(response);
+      console.log(
+        "Response that failed parsing:",
+        responseStr.substring(0, 2000) +
+          (responseStr.length > 2000 ? "..." : "")
+      );
       return [];
     }
   }

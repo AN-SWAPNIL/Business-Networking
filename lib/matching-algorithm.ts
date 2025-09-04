@@ -24,6 +24,7 @@ interface Match {
   matchReasons: string[];
   sharedInterests: string[];
   complementarySkills: string[];
+  matchTypes: string[]; // Traditional algorithm match types
 }
 
 export class MatchingAlgorithm {
@@ -92,12 +93,16 @@ export class MatchingAlgorithm {
     );
     score += companyScore * 0.1;
 
+    // 6. Calculate match types based on preferences
+    const matchTypes = this.calculateMatchTypes(currentUser, targetUser);
+
     return {
       user: targetUser,
       compatibilityScore: Math.round(score),
       matchReasons,
       sharedInterests,
       complementarySkills,
+      matchTypes,
     };
   }
 
@@ -295,5 +300,37 @@ export class MatchingAlgorithm {
     )
       return "investment";
     return "other";
+  }
+
+  private calculateMatchTypes(currentUser: User, targetUser: User): string[] {
+    const types: string[] = [];
+
+    // Match type logic based on preferences
+    if (currentUser.preferences.mentor && !targetUser.preferences.mentor)
+      types.push("Mentee");
+    if (!currentUser.preferences.mentor && targetUser.preferences.mentor)
+      types.push("Mentor");
+    if (
+      currentUser.preferences.collaborate &&
+      targetUser.preferences.collaborate
+    )
+      types.push("Collaborator");
+    if (currentUser.preferences.invest && !targetUser.preferences.invest)
+      types.push("Investment Opportunity");
+    if (!currentUser.preferences.invest && targetUser.preferences.invest)
+      types.push("Investor");
+    if (currentUser.preferences.hire && !targetUser.preferences.hire)
+      types.push("Potential Hire");
+    if (!currentUser.preferences.hire && targetUser.preferences.hire)
+      types.push("Hiring Manager");
+    if (currentUser.preferences.discuss && targetUser.preferences.discuss)
+      types.push("Discussion Partner");
+
+    // Default to Professional if no specific match types
+    if (types.length === 0) {
+      types.push("Professional");
+    }
+
+    return types;
   }
 }

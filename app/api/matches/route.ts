@@ -46,6 +46,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
+    // Get total users count (excluding current user) to calculate realistic maxResults
+    const { count: totalUsers, error: countError } = await supabase
+      .from("users")
+      .select("*", { count: "exact", head: true })
+      .neq("id", user.id);
+
+    if (countError) {
+      console.warn("Failed to get total users count:", countError);
+    }
+
+    // Calculate realistic maxResults: min(requested limit, total available users - 1)
+    const maxResults = totalUsers ? Math.min(limit, totalUsers) : limit;
+    console.log(
+      `📊 Total users available: ${
+        totalUsers || "unknown"
+      }, maxResults: ${maxResults}`
+    );
+
     if (algorithm === "rag") {
       // Use RAG-based matching
       const ragAgent = new RAGMatchingAgent();
@@ -53,8 +71,8 @@ export async function GET(request: NextRequest) {
       const result = await ragAgent.findMatches(
         {
           userId: user.id,
-          maxResults: limit,
-          minCompatibility: 40, // Use schema default
+          maxResults: maxResults,
+          minCompatibility: 20, // Use schema default
         },
         forceRefresh
       );
@@ -156,36 +174,36 @@ export async function GET(request: NextRequest) {
         let filteredMatches = traditionalMatches;
         if (category !== "all") {
           filteredMatches = traditionalMatches.filter((match) => {
+            const matchTypes = match.matchTypes || [];
+
             switch (category) {
               case "mentorship":
-                return (
-                  (currentUser.preferences.mentor &&
-                    !match.user.preferences.mentor) ||
-                  (!currentUser.preferences.mentor &&
-                    match.user.preferences.mentor)
+                return matchTypes.some(
+                  (type: string) =>
+                    type.toLowerCase().includes("mentor") ||
+                    type.toLowerCase().includes("mentee")
                 );
               case "collaboration":
-                return (
-                  currentUser.preferences.collaborate &&
-                  match.user.preferences.collaborate
+                return matchTypes.some(
+                  (type: string) =>
+                    type.toLowerCase().includes("collaborator") ||
+                    type.toLowerCase().includes("discussion partner")
                 );
               case "investment":
-                return (
-                  (currentUser.preferences.invest &&
-                    !match.user.preferences.invest) ||
-                  (!currentUser.preferences.invest &&
-                    match.user.preferences.invest)
+                return matchTypes.some(
+                  (type: string) =>
+                    type.toLowerCase().includes("investor") ||
+                    type.toLowerCase().includes("investment opportunity")
                 );
               case "hiring":
-                return (
-                  (currentUser.preferences.hire &&
-                    !match.user.preferences.hire) ||
-                  (!currentUser.preferences.hire && match.user.preferences.hire)
+                return matchTypes.some(
+                  (type: string) =>
+                    type.toLowerCase().includes("hiring manager") ||
+                    type.toLowerCase().includes("potential hire")
                 );
               case "discussion":
-                return (
-                  currentUser.preferences.discuss &&
-                  match.user.preferences.discuss
+                return matchTypes.some((type: string) =>
+                  type.toLowerCase().includes("discussion partner")
                 );
               default:
                 return true;
@@ -194,7 +212,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Limit results
-        const limitedMatches = filteredMatches.slice(0, limit);
+        const limitedMatches = filteredMatches.slice(0, maxResults);
 
         return NextResponse.json({
           success: true,
@@ -310,36 +328,36 @@ export async function GET(request: NextRequest) {
       let filteredMatches = allMatches;
       if (category !== "all") {
         filteredMatches = allMatches.filter((match) => {
+          const matchTypes = match.matchTypes || [];
+
           switch (category) {
             case "mentorship":
-              return (
-                (currentUser.preferences.mentor &&
-                  !match.user.preferences.mentor) ||
-                (!currentUser.preferences.mentor &&
-                  match.user.preferences.mentor)
+              return matchTypes.some(
+                (type: string) =>
+                  type.toLowerCase().includes("mentor") ||
+                  type.toLowerCase().includes("mentee")
               );
             case "collaboration":
-              return (
-                currentUser.preferences.collaborate &&
-                match.user.preferences.collaborate
+              return matchTypes.some(
+                (type: string) =>
+                  type.toLowerCase().includes("collaborator") ||
+                  type.toLowerCase().includes("discussion partner")
               );
             case "investment":
-              return (
-                (currentUser.preferences.invest &&
-                  !match.user.preferences.invest) ||
-                (!currentUser.preferences.invest &&
-                  match.user.preferences.invest)
+              return matchTypes.some(
+                (type: string) =>
+                  type.toLowerCase().includes("investor") ||
+                  type.toLowerCase().includes("investment opportunity")
               );
             case "hiring":
-              return (
-                (currentUser.preferences.hire &&
-                  !match.user.preferences.hire) ||
-                (!currentUser.preferences.hire && match.user.preferences.hire)
+              return matchTypes.some(
+                (type: string) =>
+                  type.toLowerCase().includes("hiring manager") ||
+                  type.toLowerCase().includes("potential hire")
               );
             case "discussion":
-              return (
-                currentUser.preferences.discuss &&
-                match.user.preferences.discuss
+              return matchTypes.some((type: string) =>
+                type.toLowerCase().includes("discussion partner")
               );
             default:
               return true;
@@ -348,7 +366,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Limit results
-      const limitedMatches = filteredMatches.slice(0, limit);
+      const limitedMatches = filteredMatches.slice(0, maxResults);
 
       return NextResponse.json({
         success: true,
