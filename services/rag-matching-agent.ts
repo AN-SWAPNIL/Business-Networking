@@ -266,6 +266,7 @@ export class RAGMatchingAgent {
               id: searchResults[0][0].metadata.user_id,
               name: searchResults[0][0].metadata.name,
               score: searchResults[0][1],
+              fullMetadata: searchResults[0][0].metadata,
             });
           } else {
             console.log(
@@ -353,6 +354,8 @@ export class RAGMatchingAgent {
               similarityScore: score,
               profileContent: doc.pageContent.substring(0, 500),
             }));
+
+          console.log(`🔍 Vector search formatted results:`, JSON.stringify(formattedResults.slice(0, 2), null, 2));
 
           return {
             success: true,
@@ -708,6 +711,9 @@ Always use the available tools to gather information and perform analysis before
         .map((match) => match.user_id)
         .filter((id) => id && typeof id === "string");
 
+      console.log(`🔍 AI Analysis user IDs:`, userIds);
+      console.log(`🔍 Full AI Analysis:`, JSON.stringify(aiAnalysis, null, 2));
+
       if (userIds.length === 0) {
         console.log("⚠️  No valid user IDs found in AI analysis");
         return [];
@@ -888,24 +894,31 @@ Always use the available tools to gather information and perform analysis before
           validatedRequest.userId
         );
 
-        if (
-          cacheResult.cached &&
-          !this.shouldRefreshCache(cacheResult.cacheAge || 0, forceRefresh)
-        ) {
-          console.log(
-            `🚀 Returning cached matches (${cacheResult.cacheAge} minutes old)`
-          );
-          const processingTime = Date.now() - startTime;
+        if (cacheResult.cached) {
+          // Check if cache is still valid (not expired)
+          const maxCacheAge = 6 * 60; // 6 hours in minutes
+          if (cacheResult.cacheAge! < maxCacheAge) {
+            console.log(
+              `🚀 Returning cached matches (${cacheResult.cacheAge} minutes old)`
+            );
+            const processingTime = Date.now() - startTime;
 
-          return {
-            success: true,
-            matches: cacheResult.matches || [],
-            totalFound: cacheResult.matches?.length || 0,
-            processingTime,
-            cacheUsed: true,
-            cacheAge: cacheResult.cacheAge,
-          };
+            return {
+              success: true,
+              matches: cacheResult.matches || [],
+              totalFound: cacheResult.matches?.length || 0,
+              processingTime,
+              cacheUsed: true,
+              cacheAge: cacheResult.cacheAge,
+            };
+          } else {
+            console.log(
+              `⏰ Cache expired (${cacheResult.cacheAge} minutes old), generating fresh matches`
+            );
+          }
         }
+      } else {
+        console.log(`🔄 Force refresh requested, bypassing cache`);
       }
 
       console.log(`🤖 Running AI agent to find fresh matches...`);

@@ -184,13 +184,14 @@ export function CollaborationMatches() {
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   // Fetch matches from API
-  const fetchMatches = async () => {
+  const fetchMatches = async (forceRefresh: boolean = false) => {
     if (!user) return;
 
     setLoading(true);
     try {
+      const forceParam = forceRefresh ? "&forceRefresh=true" : "";
       const response = await fetch(
-        `/api/matches?algorithm=rag&category=all&limit=50`
+        `/api/matches?algorithm=rag&category=all&limit=50${forceParam}`
       );
       const data = await response.json();
 
@@ -331,8 +332,10 @@ export function CollaborationMatches() {
 
   const filteredMatches = getMatchesByCategory(activeTab);
 
-  const refreshMatches = () => {
-    setRefreshKey((prev) => prev + 1);
+  const refreshMatches = async () => {
+    if (user) {
+      await fetchMatches(true); // Force refresh
+    }
   };
 
   return (
