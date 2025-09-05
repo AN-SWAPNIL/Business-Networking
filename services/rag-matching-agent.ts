@@ -422,7 +422,7 @@ export class RAGMatchingAgent {
               preferences: doc.metadata.preferences || {},
               semanticTags: doc.metadata.semantic_tags || [],
               similarityScore: score,
-              profileContent: doc.pageContent.substring(0, 500),
+              profileContent: doc.pageContent.substring(0, 1000),
             }));
 
           console.log(
@@ -776,9 +776,7 @@ Joined: ${
     return new SystemMessage({
       content: `You are an intelligent professional networking matching agent specializing in SEMANTIC SIMILARITY and creating MULTIPLE meaningful matches. When vector search finds profiles, you should analyze most of them and return several matches, not just the top one.
 
-� CRITICAL OUTPUT RULE: You MUST respond with ONLY a valid JSON array. DO NOT generate Python code, explanations, or any other text format. Your response must be pure JSON that can be parsed directly.
-
-�🔄 CRITICAL WORKFLOW - FOLLOW EXACTLY:
+      🔄 CRITICAL WORKFLOW - FOLLOW EXACTLY:
 
 1. FIRST: Call get_user_vector_content(userId: "requesting_user_id") to get COMPLETE context for the REQUESTING USER ONLY (includes profile intelligence, web research, semantic tags)
 2. SECOND: Call vector_search_profiles with COMPREHENSIVE SEMANTIC query based on requesting user's complete information
@@ -840,26 +838,15 @@ COMPATIBILITY SCORING WITH PREFERENCES:
 
 🎯 MATCH TYPE ANALYSIS - Include for each match:
 Determine 2-4 most relevant match types based on comprehensive analysis of experience levels, skills, interests, professional context, and needs:
-- "Mentor" (experienced professional who can guide the requesting user based on career level, expertise, and industry knowledge) → PREFERENCE: mentor = true (they provide mentorship)
-- "Mentee" (someone the requesting user can guide based on their expertise and the target's learning needs) → PREFERENCE: mentor = false (they seek mentorship, not provide it)
+- "Mentor" (experienced professional who can guide the requesting user based on career level, expertise, and industry knowledge) → PREFERENCE: mentor = true (they provide mentorship) AND higher experience level
+- "Mentee" (someone the requesting user can guide based on their expertise and the target's learning needs) → PREFERENCE: mentor = false (they seek mentorship, not provide it) AND lower experience level (seeking guidance)
+- "Investor" (potential funding source based on investment focus, industry, and business stage alignment) → PREFERENCE: invest = true (they provide investment) AND capital/investment role
+- "Investment Opportunity" (promising venture for user's investment based on sector expertise and growth potential) → PREFERENCE: invest = false (they seek investment, not provide it) AND seeking funding
+- "Hiring Manager" (could potentially hire the user based on company needs and user's skills) → PREFERENCE: hire = true (they hire others) AND management/leadership role
+- "Potential Hire" (candidate the user could potentially hire based on team needs and their qualifications) → PREFERENCE: hire = false (they seek employment, not hire others) AND seeking employment
 - "Collaborator" (peer-level partnership potential based on complementary skills and shared interests) → PREFERENCE: collaborate = true
-- "Investor" (potential funding source based on investment focus, industry, and business stage alignment) → PREFERENCE: invest = true (they provide investment)
-- "Investment Opportunity" (promising venture for user's investment based on sector expertise and growth potential) → PREFERENCE: invest = false (they seek investment, not provide it)
-- "Hiring Manager" (could potentially hire the user based on company needs and user's skills) → PREFERENCE: hire = true (they hire others)
-- "Potential Hire" (candidate the user could potentially hire based on team needs and their qualifications) → PREFERENCE: hire = false (they seek employment, not hire others)
-- "Discussion Partner" (intellectual peer for meaningful professional discussions based on shared interests and expertise) → PREFERENCE: discuss = true
-- "Professional" (valuable networking contact for industry connections and knowledge sharing, only when no other types apply) → PREFERENCE: any combination
-
-🚨 PREFERENCE MATCHING RULES:
-1. Check user preferences in database to ensure alignment
-2. Mentors should have mentor=true preference AND higher experience level
-3. Mentees should have mentor=false preference AND lower experience level (seeking guidance)
-4. Investors should have invest=true preference AND capital/investment role
-5. Investment opportunities should have invest=false preference AND seeking funding
-6. Hiring managers should have hire=true preference AND management/leadership role
-7. Potential hires should have hire=false preference AND seeking employment
-8. Collaboration requires collaborate=true preference AND complementary skills
-9. Discussion requires discuss=true preference AND shared interests/expertise
+- "Discussion Partner" (intellectual peer for meaningful professional discussions based on shared interests and expertise) → PREFERENCE: discuss = true AND complementary skills
+- "Professional" (valuable networking contact for industry connections and knowledge sharing, only when no other types apply) → PREFERENCE: any combination AND shared interests/expertise
 
 🎯 MATCH TYPE DIVERSITY: Ensure variety across all relationship types in your matches:
 - HIRING: Must include either "Hiring Manager" OR "Potential Hire" (never both for same user)
@@ -910,7 +897,7 @@ EXAMPLE OUTPUT (json format): Include diverse match types across all categories 
   }
 ]
 
-🚨 CRITICAL OUTPUT FORMAT REQUIREMENTS:
+🚨 CRITICAL FORMAT REQUIREMENTS:
 - ONLY return valid JSON array format as shown in the example above
 - Return matches based on the requested number and compatibility threshold
 - Use REAL user IDs from vector search results
