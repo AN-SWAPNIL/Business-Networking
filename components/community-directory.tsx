@@ -1,14 +1,29 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Users, Building, MapPin, Filter, Grid, List } from "lucide-react"
-import { UserCard } from "@/components/user-card"
-import { UserListItem } from "@/components/user-list-item"
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Search,
+  Users,
+  Building,
+  MapPin,
+  Filter,
+  Grid,
+  List,
+  Loader2,
+} from "lucide-react";
+import { UserCard } from "@/components/user-card";
+import { UserListItem } from "@/components/user-list-item";
 
 // Mock data for community members
 const mockUsers = [
@@ -20,7 +35,13 @@ const mockUsers = [
     location: "San Francisco, CA",
     bio: "Experienced product manager passionate about building user-centric solutions. Love mentoring and discussing product strategy.",
     avatar: "/professional-woman-diverse.png",
-    preferences: { mentor: true, invest: false, discuss: true, collaborate: true, hire: false },
+    preferences: {
+      mentor: true,
+      invest: false,
+      discuss: true,
+      collaborate: true,
+      hire: false,
+    },
     connections: 156,
     joinedDate: "January 2024",
   },
@@ -32,7 +53,13 @@ const mockUsers = [
     location: "New York, NY",
     bio: "Full-stack developer with expertise in React and Node.js. Always looking for interesting collaboration opportunities.",
     avatar: "/professional-man.png",
-    preferences: { mentor: false, invest: false, discuss: true, collaborate: true, hire: false },
+    preferences: {
+      mentor: false,
+      invest: false,
+      discuss: true,
+      collaborate: true,
+      hire: false,
+    },
     connections: 89,
     joinedDate: "February 2024",
   },
@@ -44,7 +71,13 @@ const mockUsers = [
     location: "Austin, TX",
     bio: "Creative UX designer focused on accessibility and inclusive design. Open to mentoring junior designers.",
     avatar: "/professional-woman-designer.png",
-    preferences: { mentor: true, invest: false, discuss: true, collaborate: false, hire: false },
+    preferences: {
+      mentor: true,
+      invest: false,
+      discuss: true,
+      collaborate: false,
+      hire: false,
+    },
     connections: 203,
     joinedDate: "March 2024",
   },
@@ -56,7 +89,13 @@ const mockUsers = [
     location: "Palo Alto, CA",
     bio: "Early-stage investor focused on B2B SaaS and fintech. Always interested in meeting innovative entrepreneurs.",
     avatar: "/professional-investor.png",
-    preferences: { mentor: true, invest: true, discuss: true, collaborate: false, hire: false },
+    preferences: {
+      mentor: true,
+      invest: true,
+      discuss: true,
+      collaborate: false,
+      hire: false,
+    },
     connections: 342,
     joinedDate: "December 2023",
   },
@@ -68,7 +107,13 @@ const mockUsers = [
     location: "Chicago, IL",
     bio: "Strategic marketing leader with 10+ years experience. Passionate about brand building and growth marketing.",
     avatar: "/professional-woman-marketing.png",
-    preferences: { mentor: true, invest: false, discuss: true, collaborate: true, hire: true },
+    preferences: {
+      mentor: true,
+      invest: false,
+      discuss: true,
+      collaborate: true,
+      hire: true,
+    },
     connections: 278,
     joinedDate: "January 2024",
   },
@@ -80,59 +125,107 @@ const mockUsers = [
     location: "Seattle, WA",
     bio: "Technology executive with expertise in scaling engineering teams. Looking to hire top talent and discuss tech trends.",
     avatar: "/professional-man-cto.png",
-    preferences: { mentor: true, invest: false, discuss: true, collaborate: false, hire: true },
+    preferences: {
+      mentor: true,
+      invest: false,
+      discuss: true,
+      collaborate: false,
+      hire: true,
+    },
     connections: 445,
     joinedDate: "November 2023",
   },
-]
+];
+
+import { useDirectory } from "@/hooks/use-directory";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function CommunityDirectory() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCompany, setSelectedCompany] = useState("all")
-  const [selectedPreference, setSelectedPreference] = useState("all")
-  const [selectedLocation, setSelectedLocation] = useState("all")
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
-  const [activeTab, setActiveTab] = useState("all")
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCompany, setSelectedCompany] = useState("all");
+  const [selectedPreference, setSelectedPreference] = useState("all");
+  const [selectedLocation, setSelectedLocation] = useState("all");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [activeTab, setActiveTab] = useState("all");
 
-  // Get unique companies and locations for filters
-  const companies = Array.from(new Set(mockUsers.map((user) => user.company)))
-  const locations = Array.from(new Set(mockUsers.map((user) => user.location)))
+  // Fetch directory data using the custom hook
+  const { data, loading, error, refetch } = useDirectory({
+    search: searchQuery,
+    company: selectedCompany !== "all" ? selectedCompany : undefined,
+    location: selectedLocation !== "all" ? selectedLocation : undefined,
+    preference: selectedPreference !== "all" ? selectedPreference : undefined,
+    tab: activeTab !== "all" ? activeTab : undefined,
+    limit: 50, // Fetch more items initially
+  });
 
-  // Filter users based on search and filters
-  const filteredUsers = mockUsers.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.bio.toLowerCase().includes(searchQuery.toLowerCase())
+  // Get data with fallbacks
+  const users = data?.users || [];
+  const stats = data?.stats || {
+    totalMembers: 0,
+    companies: 0,
+    locations: 0,
+    mentors: 0,
+    investors: 0,
+    collaborators: 0,
+    hiring: 0,
+  };
+  const companies = data?.filters?.companies || [];
+  const locations = data?.filters?.locations || [];
 
-    const matchesCompany = selectedCompany === "all" || user.company === selectedCompany
-    const matchesLocation = selectedLocation === "all" || user.location === selectedLocation
-
-    const matchesPreference =
-      selectedPreference === "all" ||
-      (selectedPreference === "mentor" && user.preferences.mentor) ||
-      (selectedPreference === "invest" && user.preferences.invest) ||
-      (selectedPreference === "discuss" && user.preferences.discuss) ||
-      (selectedPreference === "collaborate" && user.preferences.collaborate) ||
-      (selectedPreference === "hire" && user.preferences.hire)
-
-    const matchesTab =
-      activeTab === "all" ||
-      (activeTab === "mentors" && user.preferences.mentor) ||
-      (activeTab === "investors" && user.preferences.invest) ||
-      (activeTab === "collaborators" && user.preferences.collaborate) ||
-      (activeTab === "hiring" && user.preferences.hire)
-
-    return matchesSearch && matchesCompany && matchesLocation && matchesPreference && matchesTab
-  })
+  // Find the maximum preference count and its label
+  const preferenceStats = [
+    { label: "Mentors", count: stats.mentors },
+    { label: "Collaborators", count: stats.collaborators },
+    { label: "Investors", count: stats.investors },
+    { label: "Hiring", count: stats.hiring },
+  ];
+  const maxPreference = preferenceStats.reduce((max, current) =>
+    current.count > max.count ? current : max
+  );
 
   const clearFilters = () => {
-    setSearchQuery("")
-    setSelectedCompany("all")
-    setSelectedPreference("all")
-    setSelectedLocation("all")
-    setActiveTab("all")
+    setSearchQuery("");
+    setSelectedCompany("all");
+    setSelectedPreference("all");
+    setSelectedLocation("all");
+    setActiveTab("all");
+  };
+
+  // Show loading state
+  if (loading && !data) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground">
+              Loading community directory...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error && !data) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        <Alert variant="destructive">
+          <AlertDescription>
+            Failed to load community directory: {error}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refetch}
+              className="ml-2"
+            >
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
   }
 
   return (
@@ -140,14 +233,26 @@ export function CommunityDirectory() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-serif font-bold text-primary">Community Directory</h1>
-          <p className="text-muted-foreground">Discover and connect with professionals in your network</p>
+          <h1 className="text-3xl font-serif font-bold text-primary">
+            Community Directory
+          </h1>
+          <p className="text-muted-foreground">
+            Discover and connect with professionals in your network
+          </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant={viewMode === "grid" ? "default" : "outline"} size="sm" onClick={() => setViewMode("grid")}>
+          <Button
+            variant={viewMode === "grid" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setViewMode("grid")}
+          >
             <Grid className="w-4 h-4" />
           </Button>
-          <Button variant={viewMode === "list" ? "default" : "outline"} size="sm" onClick={() => setViewMode("list")}>
+          <Button
+            variant={viewMode === "list" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setViewMode("list")}
+          >
             <List className="w-4 h-4" />
           </Button>
         </div>
@@ -160,7 +265,7 @@ export function CommunityDirectory() {
             <div className="flex items-center space-x-2">
               <Users className="w-5 h-5 text-primary" />
               <div>
-                <p className="text-2xl font-bold">{mockUsers.length}</p>
+                <p className="text-2xl font-bold">{stats.totalMembers}</p>
                 <p className="text-sm text-muted-foreground">Total Members</p>
               </div>
             </div>
@@ -171,7 +276,7 @@ export function CommunityDirectory() {
             <div className="flex items-center space-x-2">
               <Building className="w-5 h-5 text-accent" />
               <div>
-                <p className="text-2xl font-bold">{companies.length}</p>
+                <p className="text-2xl font-bold">{stats.companies}</p>
                 <p className="text-sm text-muted-foreground">Companies</p>
               </div>
             </div>
@@ -182,7 +287,7 @@ export function CommunityDirectory() {
             <div className="flex items-center space-x-2">
               <MapPin className="w-5 h-5 text-primary" />
               <div>
-                <p className="text-2xl font-bold">{locations.length}</p>
+                <p className="text-2xl font-bold">{stats.locations}</p>
                 <p className="text-sm text-muted-foreground">Locations</p>
               </div>
             </div>
@@ -193,8 +298,10 @@ export function CommunityDirectory() {
             <div className="flex items-center space-x-2">
               <Users className="w-5 h-5 text-accent" />
               <div>
-                <p className="text-2xl font-bold">{mockUsers.filter((u) => u.preferences.mentor).length}</p>
-                <p className="text-sm text-muted-foreground">Mentors</p>
+                <p className="text-2xl font-bold">{maxPreference.count}</p>
+                <p className="text-sm text-muted-foreground">
+                  Top: {maxPreference.label}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -223,7 +330,10 @@ export function CommunityDirectory() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Select value={selectedCompany} onValueChange={setSelectedCompany}>
+              <Select
+                value={selectedCompany}
+                onValueChange={setSelectedCompany}
+              >
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="Company" />
                 </SelectTrigger>
@@ -236,7 +346,10 @@ export function CommunityDirectory() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+              <Select
+                value={selectedLocation}
+                onValueChange={setSelectedLocation}
+              >
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="Location" />
                 </SelectTrigger>
@@ -249,7 +362,10 @@ export function CommunityDirectory() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={selectedPreference} onValueChange={setSelectedPreference}>
+              <Select
+                value={selectedPreference}
+                onValueChange={setSelectedPreference}
+              >
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="Preference" />
                 </SelectTrigger>
@@ -274,50 +390,55 @@ export function CommunityDirectory() {
       {/* Category Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
         <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="all">All ({mockUsers.length})</TabsTrigger>
-          <TabsTrigger value="mentors">Mentors ({mockUsers.filter((u) => u.preferences.mentor).length})</TabsTrigger>
+          <TabsTrigger value="all">All ({stats.totalMembers})</TabsTrigger>
+          <TabsTrigger value="mentors">Mentors ({stats.mentors})</TabsTrigger>
           <TabsTrigger value="investors">
-            Investors ({mockUsers.filter((u) => u.preferences.invest).length})
+            Investors ({stats.investors})
           </TabsTrigger>
           <TabsTrigger value="collaborators">
-            Collaborators ({mockUsers.filter((u) => u.preferences.collaborate).length})
+            Collaborators ({stats.collaborators})
           </TabsTrigger>
-          <TabsTrigger value="hiring">Hiring ({mockUsers.filter((u) => u.preferences.hire).length})</TabsTrigger>
+          <TabsTrigger value="hiring">Hiring ({stats.hiring})</TabsTrigger>
         </TabsList>
       </Tabs>
 
       {/* Results */}
       <div className="mb-4">
         <p className="text-sm text-muted-foreground">
-          Showing {filteredUsers.length} of {mockUsers.length} members
+          Showing {users.length} of {stats.totalMembers} members
+          {loading && <span className="ml-2 text-primary">Loading...</span>}
         </p>
       </div>
 
       {/* User Grid/List */}
       {viewMode === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredUsers.map((user) => (
+          {users.map((user) => (
             <UserCard key={user.id} user={user} />
           ))}
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredUsers.map((user) => (
+          {users.map((user) => (
             <UserListItem key={user.id} user={user} />
           ))}
         </div>
       )}
 
-      {filteredUsers.length === 0 && (
+      {users.length === 0 && !loading && (
         <Card className="text-center py-12">
           <CardContent>
             <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium mb-2">No members found</h3>
-            <p className="text-muted-foreground mb-4">Try adjusting your search criteria or filters</p>
+            <p className="text-muted-foreground mb-4">
+              {error
+                ? "There was an error loading the directory."
+                : "Try adjusting your search criteria or filters"}
+            </p>
             <Button onClick={clearFilters}>Clear All Filters</Button>
           </CardContent>
         </Card>
       )}
     </div>
-  )
+  );
 }

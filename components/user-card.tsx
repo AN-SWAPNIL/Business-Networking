@@ -1,60 +1,51 @@
-"use client"
+"use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Building, MapPin, Users, MessageCircle, UserPlus } from "lucide-react"
-
-interface User {
-  id: string
-  name: string
-  title: string
-  company: string
-  location: string
-  bio: string
-  avatar: string
-  preferences: {
-    mentor: boolean
-    invest: boolean
-    discuss: boolean
-    collaborate: boolean
-    hire: boolean
-  }
-  connections: number
-  joinedDate: string
-}
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Building, MapPin, Users, MessageCircle, UserPlus } from "lucide-react";
+import { DirectoryUser } from "@/hooks/use-directory";
 
 interface UserCardProps {
-  user: User
+  user: DirectoryUser;
 }
 
 export function UserCard({ user }: UserCardProps) {
   const getPreferenceBadges = () => {
-    const badges = []
-    if (user.preferences.mentor) badges.push("Mentoring")
-    if (user.preferences.invest) badges.push("Investing")
-    if (user.preferences.discuss) badges.push("Discussions")
-    if (user.preferences.collaborate) badges.push("Collaborating")
-    if (user.preferences.hire) badges.push("Hiring")
-    return badges
-  }
+    const badges = [];
+    if (user.preferences.mentor) badges.push("Mentoring");
+    if (user.preferences.invest) badges.push("Investing");
+    if (user.preferences.discuss) badges.push("Discussions");
+    if (user.preferences.collaborate) badges.push("Collaborating");
+    if (user.preferences.hire) badges.push("Hiring");
+    return badges;
+  };
 
   const handleConnect = () => {
     // In real app, send connection request
-    console.log("Connecting with", user.name)
-  }
+    console.log("Connecting with", user.name);
+  };
 
   const handleMessage = () => {
     // In real app, open message dialog
-    console.log("Messaging", user.name)
-  }
+    console.log("Messaging", user.name);
+  };
 
   return (
     <Card className="hover:shadow-lg transition-shadow duration-200">
       <CardHeader className="text-center pb-4">
         <Avatar className="w-16 h-16 mx-auto mb-3">
-          <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} />
+          <AvatarImage
+            src={user.avatar_url || "/placeholder.svg"}
+            alt={user.name}
+          />
           <AvatarFallback>
             {user.name
               .split(" ")
@@ -63,25 +54,35 @@ export function UserCard({ user }: UserCardProps) {
           </AvatarFallback>
         </Avatar>
         <CardTitle className="font-serif text-lg">{user.name}</CardTitle>
-        <CardDescription className="text-sm">{user.title}</CardDescription>
+        <CardDescription className="text-sm">
+          {user.title || "No title"}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2 text-sm">
-          <div className="flex items-center space-x-2">
-            <Building className="w-4 h-4 text-muted-foreground" />
-            <span className="truncate">{user.company}</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <MapPin className="w-4 h-4 text-muted-foreground" />
-            <span className="truncate">{user.location}</span>
-          </div>
+          {user.company && (
+            <div className="flex items-center space-x-2">
+              <Building className="w-4 h-4 text-muted-foreground" />
+              <span className="truncate">{user.company}</span>
+            </div>
+          )}
+          {user.location && (
+            <div className="flex items-center space-x-2">
+              <MapPin className="w-4 h-4 text-muted-foreground" />
+              <span className="truncate">{user.location}</span>
+            </div>
+          )}
           <div className="flex items-center space-x-2">
             <Users className="w-4 h-4 text-muted-foreground" />
             <span>{user.connections} connections</span>
           </div>
         </div>
 
-        <p className="text-sm text-muted-foreground line-clamp-3">{user.bio}</p>
+        {user.bio && (
+          <p className="text-sm text-muted-foreground line-clamp-3">
+            {user.bio}
+          </p>
+        )}
 
         {/* Preferences */}
         <div className="space-y-2">
@@ -114,5 +115,5 @@ export function UserCard({ user }: UserCardProps) {
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }
