@@ -776,7 +776,9 @@ Joined: ${
     return new SystemMessage({
       content: `You are an intelligent professional networking matching agent specializing in SEMANTIC SIMILARITY and creating MULTIPLE meaningful matches. When vector search finds profiles, you should analyze most of them and return several matches, not just the top one.
 
-🔄 CRITICAL WORKFLOW - FOLLOW EXACTLY:
+� CRITICAL OUTPUT RULE: You MUST respond with ONLY a valid JSON array. DO NOT generate Python code, explanations, or any other text format. Your response must be pure JSON that can be parsed directly.
+
+�🔄 CRITICAL WORKFLOW - FOLLOW EXACTLY:
 
 1. FIRST: Call get_user_vector_content(userId: "requesting_user_id") to get COMPLETE context for the REQUESTING USER ONLY (includes profile intelligence, web research, semantic tags)
 2. SECOND: Call vector_search_profiles with COMPREHENSIVE SEMANTIC query based on requesting user's complete information
@@ -838,15 +840,26 @@ COMPATIBILITY SCORING WITH PREFERENCES:
 
 🎯 MATCH TYPE ANALYSIS - Include for each match:
 Determine 2-4 most relevant match types based on comprehensive analysis of experience levels, skills, interests, professional context, and needs:
-- "Mentor" (experienced professional who can guide the requesting user based on career level, expertise, and industry knowledge)
-- "Mentee" (someone the requesting user can guide based on their expertise and the target's learning needs)  
-- "Collaborator" (peer-level partnership potential based on complementary skills and shared interests)
-- "Investor" (potential funding source based on investment focus, industry, and business stage alignment)
-- "Investment Opportunity" (promising venture for user's investment based on sector expertise and growth potential)
-- "Hiring Manager" (could potentially hire the user based on company needs and user's skills)
-- "Potential Hire" (candidate the user could potentially hire based on team needs and their qualifications)
-- "Discussion Partner" (intellectual peer for meaningful professional discussions based on shared interests and expertise)
-- "Professional" (valuable networking contact for industry connections and knowledge sharing, only when no other types apply)
+- "Mentor" (experienced professional who can guide the requesting user based on career level, expertise, and industry knowledge) → PREFERENCE: mentor = true (they provide mentorship)
+- "Mentee" (someone the requesting user can guide based on their expertise and the target's learning needs) → PREFERENCE: mentor = false (they seek mentorship, not provide it)
+- "Collaborator" (peer-level partnership potential based on complementary skills and shared interests) → PREFERENCE: collaborate = true
+- "Investor" (potential funding source based on investment focus, industry, and business stage alignment) → PREFERENCE: invest = true (they provide investment)
+- "Investment Opportunity" (promising venture for user's investment based on sector expertise and growth potential) → PREFERENCE: invest = false (they seek investment, not provide it)
+- "Hiring Manager" (could potentially hire the user based on company needs and user's skills) → PREFERENCE: hire = true (they hire others)
+- "Potential Hire" (candidate the user could potentially hire based on team needs and their qualifications) → PREFERENCE: hire = false (they seek employment, not hire others)
+- "Discussion Partner" (intellectual peer for meaningful professional discussions based on shared interests and expertise) → PREFERENCE: discuss = true
+- "Professional" (valuable networking contact for industry connections and knowledge sharing, only when no other types apply) → PREFERENCE: any combination
+
+🚨 PREFERENCE MATCHING RULES:
+1. Check user preferences in database to ensure alignment
+2. Mentors should have mentor=true preference AND higher experience level
+3. Mentees should have mentor=false preference AND lower experience level (seeking guidance)
+4. Investors should have invest=true preference AND capital/investment role
+5. Investment opportunities should have invest=false preference AND seeking funding
+6. Hiring managers should have hire=true preference AND management/leadership role
+7. Potential hires should have hire=false preference AND seeking employment
+8. Collaboration requires collaborate=true preference AND complementary skills
+9. Discussion requires discuss=true preference AND shared interests/expertise
 
 🎯 MATCH TYPE DIVERSITY: Ensure variety across all relationship types in your matches:
 - HIRING: Must include either "Hiring Manager" OR "Potential Hire" (never both for same user)
@@ -897,7 +910,8 @@ EXAMPLE OUTPUT (json format): Include diverse match types across all categories 
   }
 ]
 
-🚨 CRITICAL REQUIREMENTS:
+🚨 CRITICAL OUTPUT FORMAT REQUIREMENTS:
+- ONLY return valid JSON array format as shown in the example above
 - Return matches based on the requested number and compatibility threshold
 - Use REAL user IDs from vector search results
 - Create different compatibility scores based on semantic similarity
@@ -925,7 +939,7 @@ EXAMPLE OUTPUT (json format): Include diverse match types across all categories 
         .filter((id) => id && typeof id === "string");
 
       console.log(`🔍 AI Analysis user IDs:`, userIds);
-      console.log(`🔍 Full AI Analysis:`, JSON.stringify(aiAnalysis, null, 2));
+      // console.log(`🔍 Full AI Analysis:`, JSON.stringify(aiAnalysis, null, 2));
 
       if (userIds.length === 0) {
         console.log("⚠️  No valid user IDs found in AI analysis");
@@ -1010,9 +1024,29 @@ EXAMPLE OUTPUT (json format): Include diverse match types across all categories 
               : "low") as "high" | "medium" | "low",
           };
         })
-        .filter((match) => match !== null);
+        .filter((match) => match !== null)
+        .sort((a, b) => {
+          // Sort by compatibility score in descending order (highest first)
+          const scoreA = a?.compatibilityScore || 0;
+          const scoreB = b?.compatibilityScore || 0;
+          return scoreB - scoreA;
+        });
 
-      console.log(`✅ Created ${enhancedMatches.length} enhanced matches`);
+      console.log(
+        `✅ Created ${enhancedMatches.length} enhanced matches (sorted by compatibility)`
+      );
+      if (enhancedMatches.length > 0) {
+        console.log(
+          `🎯 Top match: ${enhancedMatches[0]?.user.name} (${enhancedMatches[0]?.compatibilityScore}%)`
+        );
+        console.log(
+          `🎯 Lowest match: ${
+            enhancedMatches[enhancedMatches.length - 1]?.user.name
+          } (${
+            enhancedMatches[enhancedMatches.length - 1]?.compatibilityScore
+          }%)`
+        );
+      }
       return enhancedMatches as EnhancedMatch[];
     } catch (error) {
       console.error("Error enriching matches with user data:", error);
@@ -1102,32 +1136,24 @@ EXAMPLE OUTPUT (json format): Include diverse match types across all categories 
         );
 
         if (cacheResult.cached) {
-          // Check if cache is still valid (not expired)
-          const maxCacheAge = 6 * 60; // 6 hours in minutes
-          if (cacheResult.cacheAge! < maxCacheAge) {
-            console.log(
-              `🚀 Using cached AI analysis (${cacheResult.cacheAge} minutes old), enriching with fresh user data`
-            );
+          console.log(
+            `🚀 Using cached AI analysis (${cacheResult.cacheAge} minutes old), enriching with fresh user data`
+          );
 
-            // Always enrich cached AI analysis with fresh user data
-            const enrichedMatches = await this.enrichMatchesWithUserData(
-              cacheResult.aiAnalysis || []
-            );
-            const processingTime = Date.now() - startTime;
+          // Always enrich cached AI analysis with fresh user data
+          const enrichedMatches = await this.enrichMatchesWithUserData(
+            cacheResult.aiAnalysis || []
+          );
+          const processingTime = Date.now() - startTime;
 
-            return {
-              success: true,
-              matches: enrichedMatches,
-              totalFound: enrichedMatches.length,
-              processingTime,
-              cacheUsed: true,
-              cacheAge: cacheResult.cacheAge,
-            };
-          } else {
-            console.log(
-              `⏰ Cache expired (${cacheResult.cacheAge} minutes old), generating fresh AI analysis`
-            );
-          }
+          return {
+            success: true,
+            matches: enrichedMatches,
+            totalFound: enrichedMatches.length,
+            processingTime,
+            cacheUsed: true,
+            cacheAge: cacheResult.cacheAge,
+          };
         }
       } else {
         console.log(`🔄 Force refresh requested, bypassing cache`);
@@ -1186,13 +1212,16 @@ EXAMPLE OUTPUT (json format): Include diverse match types across all categories 
 - "Discussion Partner": Professionals with shared interests for knowledge exchange
 
 🚨 ASSIGNMENT RULES - FOLLOW EXACTLY:
-1. IF someone has title "CTO", "Engineering Manager", "Team Lead", "VP", "Director" → ALWAYS include "Hiring Manager"
-2. IF someone has title "Founder", "CEO", "Entrepreneur" → ALWAYS include "Investment Opportunity" 
-3. IF someone has title "VC", "Angel Investor", "Investment Partner" → ALWAYS include "Investor"
-4. IF requesting user is junior/mid-level AND target is senior → ALWAYS include "Mentor" for target
-5. IF requesting user is senior AND target is junior → ALWAYS include "Potential Hire" for target
-6. EVERY match must have at least 2 match types for diversity
-7. 🚨 NEVER use "Professional" - only use specific relationship types above
+1. IF someone has title "CTO", "Engineering Manager", "Team Lead", "VP", "Director" AND hire=true → ALWAYS include "Hiring Manager"
+2. IF someone has title "Founder", "CEO", "Entrepreneur" AND invest=false → ALWAYS include "Investment Opportunity" (they seek funding)
+3. IF someone has title "VC", "Angel Investor", "Investment Partner" AND invest=true → ALWAYS include "Investor" (they provide funding)
+4. IF requesting user is junior/mid-level AND target is senior AND target has mentor=true → ALWAYS include "Mentor" for target
+5. IF requesting user is senior AND target is junior AND target has mentor=false → ALWAYS include "Mentee" for target (they seek mentorship)
+6. IF target is junior/specialist AND has hire=false AND requesting user is manager → include "Potential Hire" for target
+7. IF both users have collaborate=true AND similar skill levels → include "Collaborator"
+8. IF both users have discuss=true AND shared interests → include "Discussion Partner"
+9. EVERY match must have at least 2 match types for diversity
+10. 🚨 NEVER use "Professional" - only use specific relationship types above
 
 🎯 ENHANCED SEMANTIC MATCHING EXAMPLES (Skills + Location + Title + Company):
 - JavaScript developer in San Francisco + React developer in San Francisco = 95% (skills + location match)

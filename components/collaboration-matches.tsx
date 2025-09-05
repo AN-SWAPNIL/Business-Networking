@@ -336,6 +336,41 @@ export function CollaborationMatches() {
 
   const filteredMatches = getMatchesByCategory(activeTab);
 
+  // Get top 2 categories by count for dynamic stats display
+  const getCategoryStats = () => {
+    const categories = [
+      {
+        key: "mentorship",
+        label: "Mentorship",
+        icon: Users,
+        count: getMatchesByCategory("mentorship").length,
+      },
+      {
+        key: "collaboration",
+        label: "Collaboration",
+        icon: Handshake,
+        count: getMatchesByCategory("collaboration").length,
+      },
+      {
+        key: "investment",
+        label: "Investment",
+        icon: TrendingUp,
+        count: getMatchesByCategory("investment").length,
+      },
+      {
+        key: "hiring",
+        label: "Hiring",
+        icon: Building,
+        count: getMatchesByCategory("hiring").length,
+      },
+    ];
+
+    // Sort by count (descending) and take top 2
+    return categories.sort((a, b) => b.count - a.count).slice(0, 2);
+  };
+
+  const topCategories = getCategoryStats();
+
   const refreshMatches = async () => {
     if (user) {
       await fetchMatches(true); // Force refresh
@@ -374,32 +409,28 @@ export function CollaborationMatches() {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Users className="w-5 h-5 text-primary" />
-              <div>
-                <p className="text-2xl font-bold">
-                  {getMatchesByCategory("mentorship").length}
-                </p>
-                <p className="text-sm text-muted-foreground">Mentorship</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Handshake className="w-5 h-5 text-accent" />
-              <div>
-                <p className="text-2xl font-bold">
-                  {getMatchesByCategory("collaboration").length}
-                </p>
-                <p className="text-sm text-muted-foreground">Collaboration</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {topCategories.map((category, index) => {
+          const IconComponent = category.icon;
+          return (
+            <Card key={category.key}>
+              <CardContent className="p-4">
+                <div className="flex items-center space-x-2">
+                  <IconComponent
+                    className={`w-5 h-5 ${
+                      index === 0 ? "text-primary" : "text-accent"
+                    }`}
+                  />
+                  <div>
+                    <p className="text-2xl font-bold">{category.count}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {category.label}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
