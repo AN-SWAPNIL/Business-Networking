@@ -63,9 +63,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Prepare exportable data (excluding sensitive fields)
+    // Prepare exportable data (including all profile fields)
     const exportData = {
       profile: {
+        id: profile.id,
         name: profile.name,
         title: profile.title,
         company: profile.company,
@@ -73,17 +74,24 @@ export async function GET(request: NextRequest) {
         bio: profile.bio,
         phone: profile.phone,
         website: profile.website,
+        avatar_url: profile.avatar_url,
+        skills: profile.skills,
+        interests: profile.interests,
         preferences: profile.preferences,
         stats: profile.stats,
+        settings: profile.settings,
         created_at: profile.created_at,
         updated_at: profile.updated_at,
       },
       auth: {
+        id: user.id,
         email: user.email,
         created_at: user.created_at,
         last_sign_in_at: user.last_sign_in_at,
+        updated_at: user.updated_at,
       },
       exportDate: new Date().toISOString(),
+      exportVersion: "1.0",
     };
 
     return NextResponse.json({

@@ -10,6 +10,7 @@ const updateProfileSchema = z.object({
   bio: z.string().optional(),
   phone: z.string().optional(),
   website: z.string().url().optional().or(z.literal("")),
+  avatar_url: z.string().optional(),
   skills: z.array(z.string()).optional(),
   interests: z.array(z.string()).optional(),
   preferences: z
@@ -131,6 +132,7 @@ export async function PUT(request: NextRequest) {
         bio: validatedData.bio,
         phone: validatedData.phone,
         website: validatedData.website,
+        avatar_url: validatedData.avatar_url,
         skills: validatedData.skills,
         interests: validatedData.interests,
         preferences: validatedData.preferences,

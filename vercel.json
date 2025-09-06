@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/profile-intelligence",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

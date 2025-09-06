@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -34,8 +34,16 @@ import {
   Plus,
   X,
   Search,
+  Upload,
+  Trash2,
 } from "lucide-react";
-import { updateUserProfile, UserProfile } from "@/lib/api";
+import {
+  updateUserProfile,
+  UserProfile,
+  uploadAvatar,
+  removeAvatar,
+} from "@/lib/api";
+import { validateAvatarFile, getAvatarUrl } from "@/lib/avatar-upload";
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -63,6 +71,7 @@ export function EditProfileModal({
     bio: userData.bio || "",
     phone: userData.phone || "",
     website: userData.website || "",
+    avatar_url: userData.avatar_url || "",
   });
 
   const [skills, setSkills] = useState<string[]>(userData.skills || []);
@@ -77,6 +86,12 @@ export function EditProfileModal({
     []
   );
   const [skillsLoading, setSkillsLoading] = useState(false);
+
+  // Avatar upload states
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string>("");
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [preferences, setPreferences] = useState(
     userData.preferences || {
@@ -148,6 +163,91 @@ export function EditProfileModal({
 
   const removeInterest = (interestToRemove: string) => {
     setInterests(interests.filter((interest) => interest !== interestToRemove));
+  };
+
+  // Avatar upload functions
+  const handleAvatarSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file
+    const validation = validateAvatarFile(file);
+    if (!validation.valid) {
+      setError(validation.error || "Invalid file");
+      return;
+    }
+
+    setAvatarFile(file);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setAvatarPreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    // Clear any errors
+    setError(null);
+  };
+
+  const handleAvatarUpload = async () => {
+    if (!avatarFile || !userData.id) return;
+
+    setAvatarUploading(true);
+    setError(null);
+
+    try {
+      const result = await uploadAvatar(avatarFile, userData.id);
+
+      if (result.success && result.avatarUrl) {
+        setFormData((prev) => ({ ...prev, avatar_url: result.avatarUrl! }));
+        setAvatarFile(null);
+        setAvatarPreview("");
+        setSuccess("Avatar uploaded successfully!");
+
+        // Update the userData prop to reflect the change
+        const updatedUserData = { ...userData, avatar_url: result.avatarUrl };
+        onUpdate(updatedUserData);
+      } else {
+        setError(result.error || "Failed to upload avatar");
+      }
+    } catch (err) {
+      setError("An error occurred while uploading avatar");
+      console.error("Avatar upload error:", err);
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setAvatarUploading(true);
+    setError(null);
+
+    try {
+      const result = await removeAvatar();
+
+      if (result.success) {
+        setFormData((prev) => ({ ...prev, avatar_url: "" }));
+        setAvatarFile(null);
+        setAvatarPreview("");
+        setSuccess("Avatar removed successfully!");
+
+        // Update the userData prop to reflect the change
+        const updatedUserData = { ...userData, avatar_url: undefined };
+        onUpdate(updatedUserData);
+      } else {
+        setError(result.error || "Failed to remove avatar");
+      }
+    } catch (err) {
+      setError("An error occurred while removing avatar");
+      console.error("Avatar removal error:", err);
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const handleAvatarButtonClick = () => {
+    fileInputRef.current?.click();
   };
 
   const getFilteredSkills = () => {
@@ -256,20 +356,84 @@ export function EditProfileModal({
           <div className="flex items-center space-x-4">
             <Avatar className="w-20 h-20">
               <AvatarImage
-                src={userData.avatar_url || "/placeholder.svg"}
+                src={
+                  avatarPreview ||
+                  formData.avatar_url ||
+                  getAvatarUrl(userData.avatar_url, userData.name)
+                }
                 alt={userData.name}
               />
               <AvatarFallback>
                 <UserIcon className="w-8 h-8" />
               </AvatarFallback>
             </Avatar>
-            <div>
-              <Button variant="outline" size="sm" disabled>
-                <Camera className="w-4 h-4 mr-2" />
-                Change Photo
-              </Button>
-              <p className="text-xs text-muted-foreground mt-1">
-                Photo upload coming soon
+            <div className="space-y-2">
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAvatarButtonClick}
+                  disabled={avatarUploading}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  {avatarFile ? "Change Photo" : "Upload Photo"}
+                </Button>
+                {(formData.avatar_url || avatarPreview) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRemoveAvatar}
+                    disabled={avatarUploading}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Remove
+                  </Button>
+                )}
+              </div>
+
+              {avatarFile && (
+                <div className="flex space-x-2">
+                  <Button
+                    size="sm"
+                    onClick={handleAvatarUpload}
+                    disabled={avatarUploading}
+                  >
+                    {avatarUploading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Save Avatar
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setAvatarFile(null);
+                      setAvatarPreview("");
+                    }}
+                    disabled={avatarUploading}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarSelect}
+                className="hidden"
+              />
+
+              <p className="text-xs text-muted-foreground">
+                Upload an image (max 5MB). JPG, PNG, GIF supported.
               </p>
             </div>
           </div>

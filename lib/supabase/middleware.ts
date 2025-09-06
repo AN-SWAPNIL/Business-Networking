@@ -45,6 +45,7 @@ export async function updateSession(request: NextRequest) {
     "/api/auth/signup",
     "/api/auth/oauth",
     "/api/business-card",
+    "/api/cron/profile-intelligence",
   ];
 
   // Define protected paths that require authentication
@@ -55,10 +56,11 @@ export async function updateSession(request: NextRequest) {
     "/api/profile",
     "/api/account",
     "/api/profile-intelligence",
+    "/api/matches",
   ];
 
   // Define admin-only paths that require admin role
-  const adminPaths = ["/admin", "/api/csv-import"];
+  const adminPaths = ["/admin", "/api/csv-import", "/api/admin"];
 
   const currentPath = request.nextUrl.pathname;
 

@@ -143,6 +143,7 @@ export interface UpdateProfileData {
   bio?: string;
   phone?: string;
   website?: string;
+  avatar_url?: string;
   skills?: string[];
   interests?: string[];
   preferences?: {
@@ -218,6 +219,75 @@ export async function updateUserProfile(
     const errorMessage =
       err instanceof Error ? err.message : "Unknown error occurred";
     console.error("Error updating user profile:", err);
+
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Upload avatar using direct client upload
+ */
+export async function uploadAvatar(
+  file: File,
+  userId: string
+): Promise<{
+  success: boolean;
+  avatarUrl?: string;
+  error?: string;
+}> {
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("userId", userId);
+
+    const response = await fetch("/api/profile/avatar", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (err) {
+    const errorMessage =
+      err instanceof Error ? err.message : "Unknown error occurred";
+    console.error("Error uploading avatar:", err);
+
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Remove user's avatar
+ */
+export async function removeAvatar(): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    const response = await fetch("/api/profile/avatar/remove", {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (err) {
+    const errorMessage =
+      err instanceof Error ? err.message : "Unknown error occurred";
+    console.error("Error removing avatar:", err);
 
     return {
       success: false,

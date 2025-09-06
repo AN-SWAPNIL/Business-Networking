@@ -396,13 +396,6 @@ export function ProfileSettings() {
               )}
               Export My Data
             </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-start bg-transparent"
-            >
-              <FileText className="w-4 h-4 mr-2" />
-              Download Profile Information
-            </Button>
             <Separator />
             <Button
               variant="destructive"
