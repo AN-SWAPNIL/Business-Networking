@@ -43,7 +43,7 @@ export async function uploadAvatar(
 
     // Upload to Supabase storage
     const { data, error } = await supabase.storage
-      .from("avatars")
+      .from("Avatar")
       .upload(fileName, file, {
         cacheControl: "3600",
         upsert: false, // Don't overwrite, create new file
@@ -60,7 +60,7 @@ export async function uploadAvatar(
     // Get public URL
     const {
       data: { publicUrl },
-    } = supabase.storage.from("avatars").getPublicUrl(data.path);
+    } = supabase.storage.from("Avatar").getPublicUrl(data.path);
 
     return {
       success: true,
@@ -80,7 +80,7 @@ export async function uploadAvatar(
  */
 export async function deleteAvatar(avatarUrl: string): Promise<boolean> {
   try {
-    if (!avatarUrl || !avatarUrl.includes("/avatars/")) {
+    if (!avatarUrl || !avatarUrl.includes("/Avatar/")) {
       return true; // No avatar to delete or not from our storage
     }
 
@@ -90,14 +90,14 @@ export async function deleteAvatar(avatarUrl: string): Promise<boolean> {
     const url = new URL(avatarUrl);
     const pathParts = url.pathname.split("/");
 
-    // Find the avatars part and get everything after it
-    const avatarsIndex = pathParts.findIndex((part) => part === "avatars");
-    if (avatarsIndex === -1 || avatarsIndex === pathParts.length - 1) {
+    // Find the Avatar part and get everything after it
+    const avatarIndex = pathParts.findIndex((part) => part === "Avatar");
+    if (avatarIndex === -1 || avatarIndex === pathParts.length - 1) {
       return true; // No file to delete
     }
 
-    // Get the filename (everything after /avatars/)
-    const fileName = pathParts.slice(avatarsIndex + 1).join("/");
+    // Get the filename (everything after /Avatar/)
+    const fileName = pathParts.slice(avatarIndex + 1).join("/");
 
     if (!fileName) {
       return true; // No file to delete
@@ -105,7 +105,7 @@ export async function deleteAvatar(avatarUrl: string): Promise<boolean> {
 
     console.log(`🗑️ Deleting avatar file: ${fileName}`);
 
-    const { error } = await supabase.storage.from("avatars").remove([fileName]);
+    const { error } = await supabase.storage.from("Avatar").remove([fileName]);
 
     if (error) {
       console.error("Delete avatar error:", error);

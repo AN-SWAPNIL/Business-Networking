@@ -34,7 +34,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete avatar from storage if it exists
-    if (userData.avatar_url && userData.avatar_url.includes("/avatars/")) {
+    if (userData.avatar_url && userData.avatar_url.includes("/Avatar/")) {
       const deleteSuccess = await deleteAvatar(userData.avatar_url);
       if (!deleteSuccess) {
         console.warn(

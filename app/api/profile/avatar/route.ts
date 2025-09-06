@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     // Upload to Supabase storage
     const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("avatars")
+      .from("Avatar")
       .upload(uniqueFileName, fileBuffer, {
         contentType: file.type,
         cacheControl: "3600",
@@ -77,10 +77,10 @@ export async function POST(request: NextRequest) {
     // Get public URL
     const {
       data: { publicUrl },
-    } = supabase.storage.from("avatars").getPublicUrl(uploadData.path);
+    } = supabase.storage.from("Avatar").getPublicUrl(uploadData.path);
 
     // Delete previous avatar BEFORE updating database
-    if (userData.avatar_url && userData.avatar_url.includes("/avatars/")) {
+    if (userData.avatar_url && userData.avatar_url.includes("/Avatar/")) {
       const deleteSuccess = await deleteAvatar(userData.avatar_url);
       if (!deleteSuccess) {
         console.warn("Failed to delete old avatar:", userData.avatar_url);
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     if (updateError) {
       console.error("Database update error:", updateError);
       // Try to delete the uploaded file since database update failed
-      await supabase.storage.from("avatars").remove([uploadData.path]);
+      await supabase.storage.from("Avatar").remove([uploadData.path]);
       return NextResponse.json(
         { success: false, error: "Failed to update profile" },
         { status: 500 }

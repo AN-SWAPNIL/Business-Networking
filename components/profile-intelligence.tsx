@@ -251,7 +251,7 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
                 </div>
               </div>
             )}
-
+            
             {intelligence.analysis && (
               <div>
                 <h4 className="font-semibold text-lg mb-2 flex items-center gap-2">
@@ -267,7 +267,7 @@ export function ProfileIntelligence({ userProfile }: ProfileIntelligenceProps) {
                 </div>
               </div>
             )}
-
+          
             {/* Regenerate button at the bottom for easy access */}
             {intelligence.hasIntelligence && (
               <div className="pt-4 border-t">
